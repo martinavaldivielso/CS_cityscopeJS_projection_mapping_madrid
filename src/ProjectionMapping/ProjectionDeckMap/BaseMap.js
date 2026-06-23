@@ -9,8 +9,6 @@ export default function BaseMap(props) {
   const layersArray = props.layersArray;
 
   const [viewState, setViewState] = useState(() => {
-    // on init, check if prev. local storage with
-    // view state exist. If so, load it.
     if (localStorage.getItem("projectionViewStateStorage")) {
       const vs = localStorage.getItem("projectionViewStateStorage");
       console.log("loading saved projection View State from Storage...", vs);
@@ -28,34 +26,61 @@ export default function BaseMap(props) {
   });
 
   useEffect(() => {
-    // fix deck view rotate
-    document
-      .getElementById("deckgl-wrapper")
-      .addEventListener("contextmenu", (evt) => evt.preventDefault());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const wrapper = document.getElementById("deckgl-wrapper");
+    if (wrapper) {
+      wrapper.addEventListener("contextmenu", (evt) => evt.preventDefault());
+    }
+
+    return () => {
+      if (wrapper) {
+        wrapper.removeEventListener("contextmenu", (evt) => evt.preventDefault());
+      }
+    };
   }, []);
 
   const onViewStateChange = ({ viewState }) => {
-    //    save current view state to local storage
     localStorage.setItem(
       "projectionViewStateStorage",
       JSON.stringify(viewState)
     );
-    // ! lock bearing to avoid odd rotation
-    setViewState({ ...viewState, pitch: 0, orthographic: true });
+
+    setViewState({
+      ...viewState,
+      pitch: 0,
+      orthographic: true,
+    });
   };
 
   return (
-    <>
+    <div
+      id="projection-map-wrapper"
+      style={{
+        position: "fixed",
+        inset: 0,
+        width: "100vw",
+        height: "100vh",
+        overflow: "hidden",
+        backgroundColor: "black",
+        zIndex: 0,
+      }}
+    >
       <DeckGL
+        id="deckgl-wrapper"
         controller={true}
         viewState={viewState}
         onViewStateChange={onViewStateChange}
         layers={layersArray}
+        style={{
+          position: "fixed",
+          inset: 0,
+          width: "100vw",
+          height: "100vh",
+        }}
       />
+
       {viewState && viewStateEditMode && (
         <ViewStateInputs setViewState={setViewState} viewState={viewState} />
       )}
-    </>
+    </div>
   );
 }

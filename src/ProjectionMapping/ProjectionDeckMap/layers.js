@@ -1,5 +1,5 @@
 import { HeatmapLayer } from "@deck.gl/aggregation-layers";
-import { GeoJsonLayer } from "@deck.gl/layers";
+import { GeoJsonLayer, PathLayer } from "@deck.gl/layers";
 import { TileLayer } from "@deck.gl/geo-layers";
 import { BitmapLayer } from "@deck.gl/layers";
 import { SimpleMeshLayer } from "deck.gl";
@@ -19,15 +19,15 @@ function hex_to_rgba(hex) {
 
 export const createHeatmapLayer = (i, layer, GEOGRID) =>
   new HeatmapLayer({
-    id: `heatmap-layer-${i}`,
-    data: layer.data,
+    id: `heatmap-layer-${i}-${layer.id || "module"}`,
+    data: layer.data || [],
     getPosition: (d) => [d.coordinates[0], d.coordinates[1], 100],
-    getWeight: (d) => d.weight,
-    radiusPixels: 100,
-    intensity: 0.5,
-    opacity: 0.85,
-    threshold: 0.5,
-    colorRange: [
+    getWeight: (d) => d.weight || 1,
+    radiusPixels: layer.properties?.radiusPixels || 100,
+    intensity: layer.properties?.intensity || 0.5,
+    opacity: layer.properties?.opacity ?? 0.85,
+    threshold: layer.properties?.threshold || 0.5,
+    colorRange: layer.properties?.colorRange || [
       [0, 255, 0, 255],
       [255, 255, 0, 255],
       [255, 0, 0, 255],
@@ -40,43 +40,115 @@ export const createHeatmapLayer = (i, layer, GEOGRID) =>
 
 export const createGeoJsonLayer = (i, layer, GEOGRID) =>
   new GeoJsonLayer({
-    id: `geojson-layer-${i}`,
+    id: `geojson-layer-${i}-${layer.id || "module"}`,
     data: layer.data,
     pickable: true,
-    stroked: true,
-    filled: true,
-    extruded: true,
-    lineWidthScale: 20,
-    lineWidthMinPixels: 2,
+    stroked: layer.properties?.stroked ?? true,
+    filled: layer.properties?.filled ?? true,
+    extruded: layer.properties?.extruded ?? false,
+    opacity: layer.properties?.opacity ?? 0.85,
+    lineWidthScale: layer.properties?.lineWidthScale ?? 1,
+    lineWidthMinPixels: layer.properties?.lineWidthMinPixels ?? 2,
+
     getLineColor: f => {
-      const hex = f.properties.lineColor ?? f.properties.color;
-      if (!hex) return [0, 0, 0];
-    
-      return hex_to_rgba(hex);
+      const p = f.properties || {};
+      const color =
+        p.stroke_color_rgb ||
+        p.strokeColor ||
+        p.lineColor ||
+        p.color_rgb ||
+        p.color ||
+        layer.properties?.stroke_color_rgb ||
+        layer.properties?.color_rgb ||
+        layer.properties?.color;
+
+      if (Array.isArray(color)) return color;
+      if (typeof color === "string") return hex_to_rgba(color);
+      return [0, 0, 0, 255];
     },
+
     getFillColor: f => {
-      const hex = f.properties.fillColor ?? f.properties.color;
-      if (!hex) return [0, 0, 0];
-    
-      return hex_to_rgba(hex);
+      const p = f.properties || {};
+      const color =
+        p.fill_color_rgb ||
+        p.fillColor ||
+        p.color_rgb ||
+        p.color ||
+        layer.properties?.fill_color_rgb ||
+        layer.properties?.color_rgb ||
+        layer.properties?.color;
+
+      if (Array.isArray(color)) return color;
+      if (typeof color === "string") return hex_to_rgba(color);
+      return [0, 0, 0, 160];
     },
-    getRadius: 100,
-    getLineWidth: 1,
-    getElevation: 30,
+
+    getRadius: layer.properties?.getRadius ?? 100,
+    getLineWidth: layer.properties?.getLineWidth ?? 1,
+    getElevation: f =>
+      f.properties?.height ||
+      f.properties?.elevation ||
+      layer.properties?.getElevation ||
+      0,
 
     updateTriggers: {
       getFillColor: GEOGRID,
+      getLineColor: GEOGRID,
     },
   });
 
-export const createTileLayer = (mapStyle) =>
-  new TileLayer({
-    id: "sat-view-layer",
-    data:
-      mapStyle &&
-      `https://api.mapbox.com/styles/v1/relnox/${mapStyle}/tiles/256/{z}/{x}/{y}?access_token=` +
-        process.env.REACT_APP_MAPBOX_TOKEN +
-        "&attribution=false&logo=false&fresh=true",
+export const createPathLayer = (i, layer, GEOGRID) =>
+  new PathLayer({
+    id: `path-layer-${i}-${layer.id || "module"}`,
+    data: layer.data || [],
+
+    getPath: d => d.path || d.coordinates,
+
+    getColor: d =>
+      d.color ||
+      d.getColor ||
+      d.strokeColor ||
+      d.color_rgb ||
+      layer.properties?.color ||
+      layer.properties?.color_rgb ||
+      [255, 255, 255, 255],
+
+    getWidth: d =>
+      d.width ||
+      d.line_width ||
+      layer.properties?.width ||
+      layer.properties?.getWidth ||
+      6,
+
+    widthUnits: layer.properties?.widthUnits || "pixels",
+    widthScale: layer.properties?.widthScale || 1,
+    lineWidthMinPixels: layer.properties?.lineWidthMinPixels || 2,
+    lineWidthMaxPixels: layer.properties?.lineWidthMaxPixels || 14,
+
+    opacity: layer.properties?.opacity ?? 0.95,
+    rounded: layer.properties?.rounded ?? true,
+    pickable: true,
+
+    updateTriggers: {
+      getPath: GEOGRID,
+      getColor: GEOGRID,
+      getWidth: GEOGRID,
+    },
+  });
+
+export const createTileLayer = (mapStyle) => {
+  const mapboxToken = process.env.REACT_APP_MAPBOX_TOKEN;
+
+  // If there is no Mapbox token in .env, fall back to OpenStreetMap tiles.
+  // This avoids a black background during local projection debugging.
+  const tileUrl =
+    mapboxToken && mapStyle
+      ? `https://api.mapbox.com/styles/v1/relnox/${mapStyle}/tiles/256/{z}/{x}/{y}?access_token=${mapboxToken}&attribution=false&logo=false&fresh=true`
+      : "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+
+  return new TileLayer({
+    id: "base-map-layer",
+    data: tileUrl,
     minZoom: 0,
     maxZoom: 21,
     tileSize: 256,
@@ -93,11 +165,13 @@ export const createTileLayer = (mapStyle) =>
       });
     },
   });
+};
 
 export const createMeshLayer = (cityIOdata, GEOGRID, OBJLoader) => {
   const cube = new CubeGeometry({ type: "x,z", xlen: 0, ylen: 0, zlen: 0 });
 
   const header = GEOGRID.properties.header;
+
   /*
   replace every GEOGRID.features[x].properties
   with cityIOdata.GEOGRIDDATA[x] to update the
@@ -106,6 +180,7 @@ export const createMeshLayer = (cityIOdata, GEOGRID, OBJLoader) => {
   for (let i = 0; i < GEOGRID.features?.length; i++) {
     // update GEOGRID features from GEOGRIDDATA on cityio
     GEOGRID.features[i].properties = cityIOdata.GEOGRIDDATA[i];
+
     // inject id with ES7 copy of the object
     GEOGRID.features[i].properties = {
       ...GEOGRID.features[i].properties,
@@ -119,6 +194,7 @@ export const createMeshLayer = (cityIOdata, GEOGRID, OBJLoader) => {
     loaders: [OBJLoader],
     opacity: 0.85,
     mesh: cube,
+
     getPosition: (d) => {
       const pntArr = d.geometry.coordinates[0];
       const first = pntArr[1];
@@ -126,6 +202,7 @@ export const createMeshLayer = (cityIOdata, GEOGRID, OBJLoader) => {
       const center = [(first[0] + last[0]) / 2, (first[1] + last[1]) / 2, -1];
       return center;
     },
+
     getColor: (d) => d.properties.color,
     getOrientation: (d) => [-180, header.rotation, -90],
     getScale: (d) => [
@@ -133,6 +210,7 @@ export const createMeshLayer = (cityIOdata, GEOGRID, OBJLoader) => {
       1,
       GEOGRID.properties.header.cellSize / 2.5,
     ],
+
     updateTriggers: {
       getScale: GEOGRID,
     },
@@ -141,6 +219,7 @@ export const createMeshLayer = (cityIOdata, GEOGRID, OBJLoader) => {
   const textLayer = new TextLayer({
     id: "text-layer",
     data: GEOGRID.features,
+
     getPosition: (d) => {
       const pntArr = d.geometry.coordinates[0];
       const first = pntArr[1];
@@ -149,19 +228,20 @@ export const createMeshLayer = (cityIOdata, GEOGRID, OBJLoader) => {
         // center of the grid cell
         (first[0] + last[0]) / 2,
         (first[1] + last[1]) / 2,
+
         // make text slightly above the mesh
         d.properties.height + 1,
       ];
       return center;
     },
+
     getText: (d) =>
-      // get the first 2 characters of the d.properties.name || d.properties.id || null,
-      d.properties.name?.slice(0, 2) || d.properties.id?.slice(0, 2) || null,
+      d.properties.name?.slice(0, 2) || d.properties.id?.toString().slice(0, 2) || null,
 
     getSize: 10,
+
     getColor: (d) =>
-      // inverse the rgb color to make text more readable
-      d.properties.color.map((c) => 255 - c),
+      d.properties.color ? d.properties.color.map((c) => 255 - c) : [255, 255, 255],
   });
 
   return [meshLayer, textLayer];
@@ -170,14 +250,13 @@ export const createMeshLayer = (cityIOdata, GEOGRID, OBJLoader) => {
 // arc layer
 export const createArcLayer = (i, layer, GEOGRID) =>
   new ArcLayer({
-    id: `arc-layer-${i}`,
-
-    data: layer.data,
+    id: `arc-layer-${i}-${layer.id || "module"}`,
+    data: layer.data || [],
     getSourcePosition: (d) => d.from.coordinates,
     getTargetPosition: (d) => d.to.coordinates,
     getSourceColor: [255, 0, 0],
     getTargetColor: [0, 255, 0],
-    getWidth: layer.properties.width || 1,
+    getWidth: layer.properties?.width || 1,
     updateTriggers: {
       getSourceColor: GEOGRID,
     },
