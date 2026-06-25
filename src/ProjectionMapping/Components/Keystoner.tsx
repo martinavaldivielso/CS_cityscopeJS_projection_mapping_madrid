@@ -1,19 +1,14 @@
 import * as React from "react";
 import { AnchorComponent } from "./anchor";
+
 const { solve } = require("numeric");
 
 export const round = (num: number, precision: number) => {
-  var factor = Math.pow(10, precision);
-  var tempNumber = num * factor;
-  var roundedTempNumber = Math.round(tempNumber);
+  const factor = Math.pow(10, precision);
+  const tempNumber = num * factor;
+  const roundedTempNumber = Math.round(tempNumber);
   return roundedTempNumber / factor;
 };
-
-// tslint:disable-next-line:no-any
-export const range = (num: number) =>
-  (Array as any)(num)
-    .fill()
-    .map((_: any, i: any) => i * i);
 
 export const transformPointsToMatrix = (
   sourcePoints: RectPoints,
@@ -62,7 +57,6 @@ export const matrixToTransform = (matrix: Matrix3d) =>
 export const vectorToTransform = (vector: Vector) =>
   `translate(${vector[0]}px, ${vector[1]}px)`;
 
-// Component interfaces
 export interface Props {
   style?: React.CSSProperties;
   className?: string;
@@ -74,10 +68,6 @@ export interface Props {
   children?: React.ReactNode;
 }
 
-export interface Context {
-  isEditMode: boolean;
-}
-
 export interface State {
   matrix: Matrix3d;
   translateDelta: { [key: string]: Vector };
@@ -86,14 +76,8 @@ export interface State {
   containerTranslate: Vector;
 }
 
-const styles = {
-  container: {
-    position: "relative" as "relative",
-  },
-};
-
-// Sorted
 export type Anchor = "top-left" | "top-right" | "bottom-right" | "bottom-left";
+
 const anchors: Anchor[] = [
   "top-left",
   "top-right",
@@ -101,7 +85,6 @@ const anchors: Anchor[] = [
   "bottom-left",
 ];
 
-// 4x4 matrix
 export type Matrix3d = [
   number,
   number,
@@ -121,10 +104,9 @@ export type Matrix3d = [
   number
 ];
 
-// top-left, top-right, bottom-right, bottom-left
 export type RectPoints = [Vector, Vector, Vector, Vector];
 
-export type Vector = [number, number]; // [x, y]
+export type Vector = [number, number];
 
 const defaultMatrix: Matrix3d = [
   1,
@@ -142,27 +124,44 @@ const defaultMatrix: Matrix3d = [
   0,
   0,
   0,
-  1, // second and third for x and y position of element
+  1,
 ];
 
-const _setDeltaVal = () => {
-  let deltaInitVals: any = {};
-  anchors.forEach((e) => {
-    deltaInitVals[e] = [0, 0];
+const createEmptyDelta = () => {
+  const deltaInitVals: any = {};
+  anchors.forEach((anchor) => {
+    deltaInitVals[anchor] = [0, 0];
   });
   return deltaInitVals;
+};
+
+const getViewportSourcePoints = (): RectPoints => {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+
+  // Anchors are inset from the browser edges so they are easier to find/grab.
+  // Increase these values to move them closer to the center.
+  const marginX = width * 0.15;
+  const marginY = height * 0.15;
+
+  return [
+    [marginX, marginY],
+    [width - marginX, marginY],
+    [width - marginX, height - marginY],
+    [marginX, height - marginY],
+  ];
 };
 
 export default class Keystoner extends React.Component<Props, State> {
   container: HTMLElement | undefined | null;
   layerTranslateDelta: Vector | undefined;
   anchorTranslateDelta: Vector | undefined;
-  isAnchorDragging = false;
   targetPoints: RectPoints | any;
   anchorMoving: Anchor | undefined;
+
   state: State = {
     matrix: defaultMatrix,
-    translateDelta: _setDeltaVal(),
+    translateDelta: createEmptyDelta(),
     sourcePoints: undefined,
     transformOrigin: [0, 0],
     containerTranslate: [this.props.x || 0, this.props.y || 0],
@@ -171,37 +170,52 @@ export default class Keystoner extends React.Component<Props, State> {
   componentDidMount() {
     window.addEventListener("mousemove", this.onAnchorMouseMove);
     window.addEventListener("mousemove", this.onMouseMove);
-    if (this.container) {
-      const { width, height } = this.container.getBoundingClientRect();
-      const marginInitialView = 0;
-      const sourcePoints = [
-        [marginInitialView, marginInitialView],
-        [width - marginInitialView, marginInitialView],
-        [width - marginInitialView, height - marginInitialView],
-        [marginInitialView, height - marginInitialView],
-      ] as RectPoints;
-      this.targetPoints = [...sourcePoints] as RectPoints;
-      this.setState({ sourcePoints });
+    window.addEventListener("mouseup", this.onAnchorMouseUp);
+    window.addEventListener("mouseup", this.onMouseUp);
+    window.addEventListener("resize", this.resetToViewportCorners);
 
-      if (localStorage.getItem("projMap")) {
-        console.log("loading prev. projMap...");
-        let ls: any = localStorage.getItem("projMap");
-        this.setState(JSON.parse(ls));
-      }
+    const sourcePoints = getViewportSourcePoints();
+    this.targetPoints = [...sourcePoints] as RectPoints;
+
+    this.setState({ sourcePoints });
+
+    if (localStorage.getItem("projMap")) {
+      console.log("loading prev. projMap...");
+      const ls: any = localStorage.getItem("projMap");
+      this.setState(JSON.parse(ls));
     }
   }
-  componentDidUpdate(prevProps: any, prevState: State) {
-    // save whatever keystone was in state
-    localStorage.setItem("projMap", JSON.stringify(prevState));
+
+  componentDidUpdate() {
+    localStorage.setItem("projMap", JSON.stringify(this.state));
   }
 
   componentWillUnmount() {
     window.removeEventListener("mousemove", this.onAnchorMouseMove);
     window.removeEventListener("mousemove", this.onMouseMove);
+    window.removeEventListener("mouseup", this.onAnchorMouseUp);
+    window.removeEventListener("mouseup", this.onMouseUp);
+    window.removeEventListener("resize", this.resetToViewportCorners);
   }
 
-  onAnchorMouseDown = (evt: any, position: any) => {
+  resetToViewportCorners = () => {
+    const sourcePoints = getViewportSourcePoints();
+
+    this.targetPoints = [...sourcePoints] as RectPoints;
+
+    this.setState({
+      matrix: defaultMatrix,
+      translateDelta: createEmptyDelta(),
+      sourcePoints,
+      transformOrigin: [0, 0],
+      containerTranslate: [0, 0],
+    });
+  };
+
+  onAnchorMouseDown = (evt: any, position: Anchor) => {
+    evt.preventDefault();
     evt.stopPropagation();
+
     this.anchorTranslateDelta = [
       evt.pageX - this.state.translateDelta[position][0],
       evt.pageY - this.state.translateDelta[position][1],
@@ -218,8 +232,10 @@ export default class Keystoner extends React.Component<Props, State> {
     ) {
       return;
     }
+
     evt.preventDefault();
     evt.stopPropagation();
+
     const vectorIndexToModify = anchors.indexOf(this.anchorMoving);
 
     const deltaX = evt.pageX - this.anchorTranslateDelta[0];
@@ -233,7 +249,7 @@ export default class Keystoner extends React.Component<Props, State> {
     this.setState({
       matrix: transformPointsToMatrix(
         this.state.sourcePoints,
-        this.targetPoints!
+        this.targetPoints
       ),
       translateDelta: {
         ...this.state.translateDelta,
@@ -242,7 +258,7 @@ export default class Keystoner extends React.Component<Props, State> {
     });
   };
 
-  onAnchorMouseUp = (position: any) => {
+  onAnchorMouseUp = () => {
     this.anchorTranslateDelta = undefined;
     this.anchorMoving = undefined;
   };
@@ -267,7 +283,12 @@ export default class Keystoner extends React.Component<Props, State> {
   };
 
   onMouseDown = (evt: any) => {
+    if (!this.props.isEditMode) {
+      return;
+    }
+
     const { containerTranslate } = this.state;
+
     this.layerTranslateDelta = [
       evt.pageX - containerTranslate[0],
       evt.pageY - containerTranslate[1],
@@ -282,6 +303,7 @@ export default class Keystoner extends React.Component<Props, State> {
       anchorStyle,
       anchorClassName,
     } = this.props;
+
     const {
       translateDelta,
       matrix,
@@ -296,9 +318,13 @@ export default class Keystoner extends React.Component<Props, State> {
           onMouseUp={this.onMouseUp}
           style={{
             cursor: isEditMode ? "all-scroll" : "inherit",
-            position: "relative",
-            display: "inline-block",
+            position: "fixed",
+            inset: 0,
+            width: "100vw",
+            height: "100vh",
+            overflow: "hidden",
             transform: vectorToTransform(containerTranslate),
+            zIndex: 0,
           }}
         >
           <div
@@ -306,7 +332,10 @@ export default class Keystoner extends React.Component<Props, State> {
               this.container = ref;
             }}
             style={{
-              ...styles.container,
+              position: "fixed",
+              inset: 0,
+              width: "100vw",
+              height: "100vh",
               ...style,
               pointerEvents: isEditMode ? "none" : "all",
               transform: matrixToTransform(matrix),
@@ -316,22 +345,35 @@ export default class Keystoner extends React.Component<Props, State> {
           >
             {this.props.children}
           </div>
-          {isEditMode && (
-            <div>
-              {anchors.map((anchor, index) => (
-                <AnchorComponent
-                  style={anchorStyle}
-                  className={anchorClassName}
-                  key={anchor}
-                  translation={translateDelta[anchor]}
-                  position={anchor}
-                  onMouseDown={this.onAnchorMouseDown}
-                  onMouseUp={this.onAnchorMouseUp}
-                />
-              ))}
-            </div>
-          )}
         </div>
+
+        {isEditMode && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              width: "100vw",
+              height: "100vh",
+              pointerEvents: "none",
+              zIndex: 9999,
+            }}
+          >
+            {anchors.map((anchor) => (
+              <AnchorComponent
+                style={{
+                  ...anchorStyle,
+                  pointerEvents: "auto",
+                }}
+                className={anchorClassName}
+                key={anchor}
+                translation={translateDelta[anchor]}
+                position={anchor}
+                onMouseDown={this.onAnchorMouseDown}
+                onMouseUp={this.onAnchorMouseUp}
+              />
+            ))}
+          </div>
+        )}
       </>
     );
   }

@@ -206,9 +206,9 @@ export const createMeshLayer = (cityIOdata, GEOGRID, OBJLoader) => {
     getColor: (d) => d.properties.color,
     getOrientation: (d) => [-180, header.rotation, -90],
     getScale: (d) => [
-      GEOGRID.properties.header.cellSize / 2.5,
+      GEOGRID.properties.header.cellSize / 2.1,
       1,
-      GEOGRID.properties.header.cellSize / 2.5,
+      GEOGRID.properties.header.cellSize / 2.1,
     ],
 
     updateTriggers: {
