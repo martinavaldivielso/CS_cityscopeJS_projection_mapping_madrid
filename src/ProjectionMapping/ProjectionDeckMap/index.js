@@ -1,12 +1,13 @@
 /*
 
 Logic to parse through the layers:
-* This method assume a new cityIOdata object is propagated on each update on cityIO, so that deeply nested layer update will still rerender this component *
+* This method assumes a new cityIOdata object is propagated on each update on CityIO,
+so that deeply nested layer updates will still rerender this component.
 
-- loop over the cityIOdata.LAYERS
-- for LAYER[i] get the layer's type (i.e Trip, Line, Arch, Heatmap, etc)
-- for each layer type, populate a deckgl layer instance
-- if the layer has optional props field, use it to inform the layer props
+Layer drawing order:
+1. basemap
+2. selected metric layer
+3. interactive grid mesh + labels
 
 */
 
@@ -18,7 +19,8 @@ import {
   createTileLayer,
   createArcLayer,
   createGeoJsonLayer,
-  createPathLayer
+  createPathLayer,
+  createH3ClusterLayer,
 } from "./layers";
 import { useRef, useState, useEffect } from "react";
 import { OBJLoader } from "@loaders.gl/obj";
@@ -57,6 +59,7 @@ export default function ProjectionDeckMap(props) {
         if (Array.isArray(module?.moduleData?.layers)) {
           return module.moduleData.layers;
         }
+
         if (Array.isArray(module?.layers)) {
           return module.layers;
         }
@@ -68,6 +71,7 @@ export default function ProjectionDeckMap(props) {
         if (Array.isArray(module?.moduleData?.layers)) {
           return module.moduleData.layers;
         }
+
         if (Array.isArray(module?.layers)) {
           return module.layers;
         }
@@ -77,22 +81,30 @@ export default function ProjectionDeckMap(props) {
     return [];
   };
 
+  const pushGridOnTop = (layerArray) => {
+    const gridLayers = createMeshLayer(cityIOdata, GEOGRID, OBJLoader);
+
+    if (Array.isArray(gridLayers)) {
+      layerArray.push(...gridLayers);
+    } else {
+      layerArray.push(gridLayers);
+    }
+  };
+
   const createLayersArray = (forcedIndex = null) => {
     const styles = settings.map.mapStyles;
     const mapStyle = styles.Light;
 
     const l = [];
 
-    // Keep both true because you want to project the full map over the table.
+    // Basemap first.
     const SHOW_BASEMAP = true;
+
+    // Grid must be pushed LAST so it appears above metrics.
     const SHOW_GRID_MESH = true;
 
     if (SHOW_BASEMAP) {
       l.push(createTileLayer(mapStyle));
-    }
-
-    if (SHOW_GRID_MESH) {
-      l.push(createMeshLayer(cityIOdata, GEOGRID, OBJLoader));
     }
 
     const currentLayers = getModuleLayers(cityIOdata);
@@ -103,6 +115,11 @@ export default function ProjectionDeckMap(props) {
 
     if (!currentLayers || currentLayers.length === 0) {
       setLayerInfo("No module layers found");
+
+      if (SHOW_GRID_MESH) {
+        pushGridOnTop(l);
+      }
+
       setLayersToRender(l);
       return;
     }
@@ -122,6 +139,7 @@ export default function ProjectionDeckMap(props) {
 
     const layerType = layer.type;
 
+    // Metric layer goes after basemap but before the interactive grid.
     if (layerType === "heatmap") {
       l.push(createHeatmapLayer(indexRef.current, layer, GEOGRID));
     } else if (layerType === "arc") {
@@ -130,9 +148,16 @@ export default function ProjectionDeckMap(props) {
       l.push(createGeoJsonLayer(indexRef.current, layer, GEOGRID));
     } else if (layerType === "path") {
       l.push(createPathLayer(indexRef.current, layer, GEOGRID));
+    } else if (layerType === "h3cluster") {
+      l.push(createH3ClusterLayer(indexRef.current, layer, GEOGRID));
     } else {
       console.error("Layer type not supported:", layerType, layer);
       setLayerInfo(`Layer type not yet supported: ${layerType}`);
+    }
+
+    // Interactive grid goes LAST, therefore it is rendered on top.
+    if (SHOW_GRID_MESH) {
+      pushGridOnTop(l);
     }
 
     setLayersToRender(l);
