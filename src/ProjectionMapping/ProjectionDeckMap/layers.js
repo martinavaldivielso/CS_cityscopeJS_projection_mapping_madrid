@@ -120,7 +120,16 @@ export const createGeoJsonLayer = (i, layer, GEOGRID) =>
       return [0, 0, 0, 160];
     },
 
-    getRadius: layer.properties?.getRadius ?? 100,
+    pointType: layer.properties?.pointType || "circle",
+    pointRadiusUnits: layer.properties?.pointRadiusUnits || "pixels",
+    pointRadiusMinPixels: layer.properties?.pointRadiusMinPixels ?? 2,
+    pointRadiusMaxPixels: layer.properties?.pointRadiusMaxPixels ?? 20,
+    getPointRadius: f =>
+      f.properties?.point_radius ||
+      f.properties?.pointRadius ||
+      layer.properties?.getPointRadius ||
+      layer.properties?.pointRadius ||
+      6,
     getLineWidth: layer.properties?.getLineWidth ?? 1,
     getElevation: (f) =>
       f.properties?.height ||
@@ -135,6 +144,7 @@ export const createGeoJsonLayer = (i, layer, GEOGRID) =>
     updateTriggers: {
       getFillColor: GEOGRID,
       getLineColor: GEOGRID,
+      getPointRadius: GEOGRID,
     },
   });
 
