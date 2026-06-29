@@ -23,7 +23,7 @@ export const createHeatmapLayer = (i, layer, GEOGRID) =>
     data: layer.data || [],
     getPosition: (d) => [d.coordinates[0], d.coordinates[1], 100],
     getWeight: (d) => d.weight || 1,
-    radiusPixels: layer.properties?.radiusPixels || 100,
+    radiusPixels: layer.properties?.radiusPixels || 10,
     intensity: layer.properties?.intensity || 0.5,
     opacity: layer.properties?.opacity ?? 0.85,
     threshold: layer.properties?.threshold || 0.5,
@@ -120,6 +120,9 @@ export const createGeoJsonLayer = (i, layer, GEOGRID) =>
       return [0, 0, 0, 160];
     },
 
+<<<<<<< HEAD
+    getRadius: layer.properties?.getRadius ?? 10,
+=======
     pointType: layer.properties?.pointType || "circle",
     pointRadiusUnits: layer.properties?.pointRadiusUnits || "pixels",
     pointRadiusMinPixels: layer.properties?.pointRadiusMinPixels ?? 2,
@@ -130,6 +133,7 @@ export const createGeoJsonLayer = (i, layer, GEOGRID) =>
       layer.properties?.getPointRadius ||
       layer.properties?.pointRadius ||
       6,
+>>>>>>> 4419f5812be58f0460a59df48a8c00f3ae2c9565
     getLineWidth: layer.properties?.getLineWidth ?? 1,
     getElevation: (f) =>
       f.properties?.height ||
