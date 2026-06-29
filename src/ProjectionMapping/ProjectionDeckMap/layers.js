@@ -120,8 +120,16 @@ export const createGeoJsonLayer = (i, layer, GEOGRID) =>
       return [0, 0, 0, 160];
     },
 
-    // MODIFIED: Read the direct feature property or fall back to 2 meters if undefined
-    getRadius: (f) => f.properties?.point_radius || layer.properties?.getRadius || 2,
+    pointType: layer.properties?.pointType || "circle",
+    pointRadiusUnits: layer.properties?.pointRadiusUnits || "pixels",
+    pointRadiusMinPixels: layer.properties?.pointRadiusMinPixels ?? 2,
+    pointRadiusMaxPixels: layer.properties?.pointRadiusMaxPixels ?? 20,
+    getPointRadius: f =>
+      f.properties?.point_radius ||
+      f.properties?.pointRadius ||
+      layer.properties?.getPointRadius ||
+      layer.properties?.pointRadius ||
+      6,
     getLineWidth: layer.properties?.getLineWidth ?? 1,
     getElevation: (f) =>
       f.properties?.height ||
@@ -136,6 +144,7 @@ export const createGeoJsonLayer = (i, layer, GEOGRID) =>
     updateTriggers: {
       getFillColor: GEOGRID,
       getLineColor: GEOGRID,
+      getPointRadius: GEOGRID,
     },
   });
 
