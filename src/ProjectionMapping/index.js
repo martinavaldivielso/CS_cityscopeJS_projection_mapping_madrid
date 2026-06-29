@@ -8,6 +8,7 @@ export default function ProjectionMapping(props) {
   const tableName = props.tableName;
   // state to store the cityIO data
   const [cityIOData, setCityIOData] = useState();
+  const [selectedLayerId, setSelectedLayerId] = useState(null);
 
   const { readyState, sendJsonMessage, lastJsonMessage } = useWebSocket(
     //  get cityIO url from the settings
@@ -42,22 +43,43 @@ export default function ProjectionMapping(props) {
       console.log("Table ratio: ", numCols / numRows);
     } else if (
       lastJsonMessage &&
-      lastJsonMessage.type === "GEOGRIDDATA_UPDATE"
+      (lastJsonMessage.type === "GEOGRIDDATA_UPDATE" ||
+        lastJsonMessage.type === "UPDATE_GRID")
     ) {
-      // setCityIOData so that GEOGRIDDATA nested data is updated
+      const content = lastJsonMessage.content || {};
+      const geogriddata = content.geogriddata || content.GEOGRIDDATA || content;
+      const layerID = content.layerID || content.layerId || content.layer_id;
+
+      if (layerID) {
+        setSelectedLayerId(layerID);
+      }
+
       setCityIOData((prev) => {
         return {
           ...prev,
-          GEOGRIDDATA: lastJsonMessage.content,
+          GEOGRIDDATA: geogriddata,
+          selectedLayerId: layerID || prev?.selectedLayerId || null,
         };
       });
       // if the lastJsonMessage is of type "INDICATOR", log it
     } else if (lastJsonMessage && lastJsonMessage.type === "MODULE") {
+      const moduleData = lastJsonMessage.content?.moduleData || {};
+      const layerID =
+        moduleData.selectedLayerId ||
+        moduleData.layerID ||
+        moduleData.layerId ||
+        moduleData.layer_id;
+
+      if (layerID) {
+        setSelectedLayerId(layerID);
+      }
+
       // setCityIOData so that the INDICATOR nested data is updated
       setCityIOData((prev) => {
         return {
           ...prev,
-          LAYERS: lastJsonMessage.content?.moduleData?.layers,
+          LAYERS: moduleData.layers,
+          selectedLayerId: layerID || prev?.selectedLayerId || null,
         };
       });
       // if the lastJsonMessage is of type "ERROR", log it
@@ -131,6 +153,7 @@ export default function ProjectionMapping(props) {
               <ProjectionDeckMap
                 viewStateEditMode={viewStateEditMode}
                 cityIOdata={cityIOData}
+                selectedLayerId={selectedLayerId}
               />
             </Keystoner>
           </div>

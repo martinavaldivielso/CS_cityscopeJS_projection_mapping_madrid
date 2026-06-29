@@ -25,14 +25,76 @@ import {
 import { useRef, useState, useEffect } from "react";
 import { OBJLoader } from "@loaders.gl/obj";
 
+const layerAliases = {
+  AN: "accessToNature",
+  ACCESS_TO_NATURE: "accessToNature",
+  NATURE: "accessToNature",
+  ACCESSIBILITY: "accessibility",
+  ACC: "accessibility",
+  GA: "accessibility",
+  GENERAL_ACCESSIBILITY: "accessibility",
+  RA: "restaurantAccessibility",
+  RESTAURANT: "restaurantAccessibility",
+  RESTAURANT_ACCESSIBILITY: "restaurantAccessibility",
+  PT: "publicTransitAccessibility",
+  PTA: "publicTransitAccessibility",
+  TRANSIT: "publicTransitAccessibility",
+  PUBLIC_TRANSIT: "publicTransitAccessibility",
+  PUBLIC_TRANSIT_ACCESSIBILITY: "publicTransitAccessibility",
+  UH: "urbanHeatH3",
+  UHI: "urbanHeatH3",
+  HEAT: "urbanHeatH3",
+  URBAN_HEAT: "urbanHeatH3",
+  URBAN_HEAT_H3: "urbanHeatH3",
+  URBAN_HEAT_HEATMAP: "urbanHeatHeatmap",
+};
+
+function normalizeLayerLabel(value) {
+  return String(value || "")
+    .trim()
+    .replace(/[\s-]+/g, "_")
+    .toUpperCase();
+}
+
+function canonicalLayerId(value) {
+  if (!value) return null;
+  const normalized = normalizeLayerLabel(value);
+  return layerAliases[normalized] || String(value).trim();
+}
+
+function layerMatchesLabel(layer, label) {
+  const target = canonicalLayerId(label);
+
+  if (!target || !layer) {
+    return false;
+  }
+
+  const candidates = [
+    layer.id,
+    layer.name,
+    layer.label,
+    layer.properties?.id,
+    layer.properties?.name,
+    layer.properties?.label,
+  ].filter(Boolean);
+
+  return candidates.some((candidate) => {
+    const canonicalCandidate = canonicalLayerId(candidate);
+    return (
+      canonicalCandidate === target ||
+      normalizeLayerLabel(canonicalCandidate) === normalizeLayerLabel(target)
+    );
+  });
+}
+
 export default function ProjectionDeckMap(props) {
   const indexRef = useRef(0);
 
   const [layersToRender, setLayersToRender] = useState([]);
   const [layerInfo, setLayerInfo] = useState(null);
-  const [selectedLayerIndex, setSelectedLayerIndex] = useState(0);
 
   const cityIOdata = props.cityIOdata;
+  const selectedLayerId = props.selectedLayerId || cityIOdata.selectedLayerId;
   const viewStateEditMode = props.viewStateEditMode;
   const GEOGRID = cityIOdata.GEOGRID;
 
@@ -91,7 +153,28 @@ export default function ProjectionDeckMap(props) {
     }
   };
 
-  const createLayersArray = (forcedIndex = null) => {
+  const layerIndexFromTableSelection = (currentLayers) => {
+    if (!selectedLayerId) {
+      return null;
+    }
+
+    const selectedIndex = currentLayers.findIndex((layer) =>
+      layerMatchesLabel(layer, selectedLayerId)
+    );
+
+    if (selectedIndex < 0) {
+      console.warn(
+        "No projection layer matched table layerID:",
+        selectedLayerId,
+        currentLayers.map((layer) => layer.id || layer.name || layer.label)
+      );
+      return null;
+    }
+
+    return selectedIndex;
+  };
+
+  const createLayersArray = () => {
     const styles = settings.map.mapStyles;
     const mapStyle = styles.Light;
 
@@ -112,6 +195,7 @@ export default function ProjectionDeckMap(props) {
     console.log("Projection cityIOdata:", cityIOdata);
     console.log("Projection currentLayers:", currentLayers);
     console.log("Current projection layer index:", indexRef.current);
+    console.log("Current table layerID:", selectedLayerId);
 
     if (!currentLayers || currentLayers.length === 0) {
       setLayerInfo("No module layers found");
@@ -124,7 +208,7 @@ export default function ProjectionDeckMap(props) {
       return;
     }
 
-    const layerIndex = forcedIndex !== null ? forcedIndex : indexRef.current;
+    const layerIndex = layerIndexFromTableSelection(currentLayers) ?? indexRef.current;
 
     if (layerIndex >= currentLayers.length || layerIndex < 0) {
       indexRef.current = 0;
@@ -135,7 +219,6 @@ export default function ProjectionDeckMap(props) {
     const layer = currentLayers[indexRef.current];
 
     setLayerInfo(layer.id || `Layer ${indexRef.current + 1}`);
-    setSelectedLayerIndex(indexRef.current);
 
     const layerType = layer.type;
 
@@ -166,118 +249,10 @@ export default function ProjectionDeckMap(props) {
   useEffect(() => {
     createLayersArray();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cityIOdata]);
-
-  useEffect(() => {
-    function handleKeyDown(event) {
-      const currentLayers = getModuleLayers(cityIOdata);
-
-      if (!currentLayers || currentLayers.length === 0) {
-        indexRef.current = 0;
-        setSelectedLayerIndex(0);
-        createLayersArray(0);
-        return;
-      }
-
-      if (event.key === "Enter" || event.key === "ArrowRight") {
-        const nextIndex = (indexRef.current + 1) % currentLayers.length;
-        indexRef.current = nextIndex;
-        setSelectedLayerIndex(nextIndex);
-        createLayersArray(nextIndex);
-      }
-
-      if (event.key === "ArrowLeft") {
-        const previousIndex =
-          (indexRef.current - 1 + currentLayers.length) % currentLayers.length;
-        indexRef.current = previousIndex;
-        setSelectedLayerIndex(previousIndex);
-        createLayersArray(previousIndex);
-      }
-
-      const numberPressed = parseInt(event.key, 10);
-
-      if (
-        !Number.isNaN(numberPressed) &&
-        numberPressed >= 1 &&
-        numberPressed <= currentLayers.length
-      ) {
-        const selectedIndex = numberPressed - 1;
-        indexRef.current = selectedIndex;
-        setSelectedLayerIndex(selectedIndex);
-        createLayersArray(selectedIndex);
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => window.removeEventListener("keydown", handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cityIOdata]);
-
-  const currentLayersForButtons = getModuleLayers(cityIOdata);
+  }, [cityIOdata, selectedLayerId]);
 
   return (
     <>
-      {currentLayersForButtons.length > 0 && (
-        <div
-          style={{
-            position: "absolute",
-            zIndex: 2,
-            top: 10,
-            left: 10,
-            padding: 10,
-            maxWidth: 360,
-            backgroundColor: "rgba(0, 0, 0, 0.65)",
-            color: "white",
-            borderRadius: 6,
-            fontFamily: "sans-serif, helvetica, arial",
-          }}
-        >
-          <div style={{ marginBottom: 8, fontWeight: "bold" }}>
-            Projection Layers
-          </div>
-
-          {currentLayersForButtons.map((layer, i) => (
-            <button
-              key={layer.id || i}
-              onClick={() => {
-                indexRef.current = i;
-                setSelectedLayerIndex(i);
-                createLayersArray(i);
-              }}
-              style={{
-                display: "block",
-                width: "100%",
-                marginBottom: 5,
-                padding: "6px 8px",
-                textAlign: "left",
-                border: "none",
-                borderRadius: 4,
-                cursor: "pointer",
-                color: "white",
-                backgroundColor:
-                  i === selectedLayerIndex
-                    ? "rgba(0, 120, 255, 0.9)"
-                    : "rgba(255, 255, 255, 0.15)",
-              }}
-            >
-              {i + 1}. {layer.id || `Layer ${i + 1}`}
-            </button>
-          ))}
-
-          <div
-            style={{
-              marginTop: 8,
-              fontSize: 12,
-              opacity: 0.8,
-              lineHeight: 1.4,
-            }}
-          >
-            Enter / → next · ← previous · 1–9 jump
-          </div>
-        </div>
-      )}
-
       {layerInfo && (
         <div
           style={{
