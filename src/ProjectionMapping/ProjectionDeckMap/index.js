@@ -1,8 +1,13 @@
 /*
 
-Logic to parse through the layers:
-* This method assumes a new cityIOdata object is propagated on each update on CityIO,
-so that deeply nested layer updates will still rerender this component.
+ProjectionDeckMap
+
+Current behavior:
+1. Metric is selected by the interactive table slider through CityIO layerID.
+2. Interactive grid is drawn on top of the metric layer.
+3. Projected text legend is added near the lower-right corner.
+4. A projected building height indicator is shown next to HEIGHT.
+5. The projected building uses the same color as the active interactive piece / building type.
 
 Layer drawing order:
 1. basemap
@@ -25,13 +30,42 @@ import {
 import { useRef, useState, useEffect } from "react";
 import { OBJLoader } from "@loaders.gl/obj";
 
-const layerAliases = {
+const METRIC_OPTIONS = [
+  {
+    label: "UH",
+    name: "Urban Heat",
+    layerId: "urbanHeatH3",
+  },
+  {
+    label: "AN",
+    name: "Access to Nature",
+    layerId: "accessToNature",
+  },
+  {
+    label: "A",
+    name: "Accessibility",
+    layerId: "accessibility",
+  },
+  {
+    label: "RA",
+    name: "Restaurant Accessibility",
+    layerId: "restaurantAccessibility",
+  },
+  {
+    label: "PTA",
+    name: "Public Transit Accessibility",
+    layerId: "publicTransitAccessibility",
+  },
+];
+
+const LAYER_ALIASES = {
   AN: "accessToNature",
   ACCESS_TO_NATURE: "accessToNature",
   NATURE: "accessToNature",
-  ACCESSIBILITY: "accessibility",
+  A: "accessibility",
   ACC: "accessibility",
   GA: "accessibility",
+  ACCESSIBILITY: "accessibility",
   GENERAL_ACCESSIBILITY: "accessibility",
   RA: "restaurantAccessibility",
   RESTAURANT: "restaurantAccessibility",
@@ -59,7 +93,7 @@ function normalizeLayerLabel(value) {
 function canonicalLayerId(value) {
   if (!value) return null;
   const normalized = normalizeLayerLabel(value);
-  return layerAliases[normalized] || String(value).trim();
+  return LAYER_ALIASES[normalized] || String(value).trim();
 }
 
 function layerMatchesLabel(layer, label) {
@@ -87,6 +121,277 @@ function layerMatchesLabel(layer, label) {
   });
 }
 
+function readHeightValue(cell) {
+  if (!cell) return 0;
+
+  const rawHeight =
+    cell.height ??
+    cell.building_height ??
+    cell.buildingHeight ??
+    cell.slider_height ??
+    cell.height_slider ??
+    cell.heightSlider ??
+    0;
+
+  let heightValue = 0;
+
+  // CityScope heights are often [min, current, max].
+  if (Array.isArray(rawHeight)) {
+    if (rawHeight.length >= 2) {
+      heightValue = Number(rawHeight[1]);
+    } else if (rawHeight.length === 1) {
+      heightValue = Number(rawHeight[0]);
+    }
+  } else {
+    heightValue = Number(rawHeight);
+  }
+
+  if (Number.isNaN(heightValue)) {
+    return 0;
+  }
+
+  return heightValue;
+}
+
+function normalizeColor(rawColor) {
+  if (!rawColor) {
+    return [255, 255, 255];
+  }
+
+  if (Array.isArray(rawColor)) {
+    return [
+      Number(rawColor[0]) || 0,
+      Number(rawColor[1]) || 0,
+      Number(rawColor[2]) || 0,
+    ];
+  }
+
+  return [255, 255, 255];
+}
+
+function isActiveBuildingCell(cell) {
+  if (!cell) return false;
+
+  const name =
+    cell.name ||
+    cell.land_use ||
+    cell.type ||
+    cell.use ||
+    "";
+
+  const text = String(name).toLowerCase();
+
+  if (
+    text === "" ||
+    text === "none" ||
+    text === "empty" ||
+    text === "0" ||
+    text === "0f"
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+function getActiveBuildingInfo(cityIOdata) {
+  const geogridData = cityIOdata?.GEOGRIDDATA;
+
+  if (!Array.isArray(geogridData)) {
+    return {
+      height: 0,
+      color: [255, 255, 255],
+      name: "Empty",
+    };
+  }
+
+  let activeCell = null;
+  let maxHeight = 0;
+
+  for (const cell of geogridData) {
+    if (!cell) continue;
+
+    const heightValue = readHeightValue(cell);
+
+    // Prefer a placed/active building with height.
+    if (heightValue > maxHeight && isActiveBuildingCell(cell)) {
+      maxHeight = heightValue;
+      activeCell = cell;
+    }
+  }
+
+  // Fallback: use the tallest cell even if the name is not recognized.
+  if (!activeCell) {
+    for (const cell of geogridData) {
+      if (!cell) continue;
+
+      const heightValue = readHeightValue(cell);
+
+      if (heightValue > maxHeight) {
+        maxHeight = heightValue;
+        activeCell = cell;
+      }
+    }
+  }
+
+  if (!activeCell) {
+    return {
+      height: 0,
+      color: [255, 255, 255],
+      name: "Empty",
+    };
+  }
+
+  const rawColor =
+    activeCell.color ||
+    activeCell.color_rgb ||
+    activeCell.rgb ||
+    activeCell.fillColor ||
+    activeCell.fill_color_rgb ||
+    [255, 255, 255];
+
+  const color = normalizeColor(rawColor);
+
+  const name =
+    activeCell.name ||
+    activeCell.land_use ||
+    activeCell.type ||
+    activeCell.use ||
+    "Building";
+
+  return {
+    height: maxHeight,
+    color,
+    name,
+  };
+}
+
+function ProjectionLegend({ selectedLayerId, cityIOdata }) {
+  // Position for your current projection configuration.
+  // Increase LEGEND_LEFT to move right.
+  // Increase LEGEND_TOP to move down.
+  const LEGEND_LEFT = 1240;
+  const LEGEND_TOP = 660;
+
+  const activeBuilding = getActiveBuildingInfo(cityIOdata);
+  const activeHeight = activeBuilding.height;
+  const activeColor = activeBuilding.color;
+  const activeName = activeBuilding.name;
+
+  // Change this to match the maximum real slider height/floors.
+  const MAX_HEIGHT = 10;
+
+  const heightRatio = Math.max(0, Math.min(1, activeHeight / MAX_HEIGHT));
+
+  // Smaller projected building, placed to the left of HEIGHT.
+  const BUILDING_BASE_WIDTH = 24;
+  const BUILDING_MIN_HEIGHT = 0;
+  const BUILDING_MAX_HEIGHT = 120;
+
+  const projectedBuildingHeight =
+    BUILDING_MIN_HEIGHT +
+    heightRatio * (BUILDING_MAX_HEIGHT - BUILDING_MIN_HEIGHT);
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        zIndex: 20,
+        left: LEGEND_LEFT,
+        top: LEGEND_TOP,
+        color: "white",
+        fontFamily: "sans-serif, helvetica, arial",
+        fontWeight: "900",
+        pointerEvents: "none",
+        textShadow: "0 0 4px black, 0 0 8px black, 0 0 12px black",
+      }}
+    >
+
+      <div
+        style={{
+          position: "relative",
+          width: 360,
+          height: 230,
+          fontSize: 14,
+        }}
+      >
+        {/* Smaller projected building height + type color, to the left of HEIGHT */}
+        <div
+          style={{
+            position: "absolute",
+            left: -105,
+            bottom: 95,
+            width: BUILDING_BASE_WIDTH,
+            height: projectedBuildingHeight,
+            backgroundColor: `rgba(${activeColor[0]}, ${activeColor[1]}, ${activeColor[2]}, 0.95)`,
+            border: "2px solid white",
+            boxShadow: `0 0 8px rgba(${activeColor[0]}, ${activeColor[1]}, ${activeColor[2]}, 0.95), 0 0 10px black`,
+            transformOrigin: "bottom center",
+          }}
+        />
+
+        {/* Building type label */}
+        <div
+          style={{
+            position: "absolute",
+            left: -125,
+            bottom: 20,
+            width: 110,
+            textAlign: "center",
+            fontSize: 10,
+          }}
+        >
+          {activeName}
+        </div>
+
+        <div
+          style={{
+            position: "absolute",
+            left: -35,
+            top: 170,
+          }}
+        >
+          HEIGHT
+        </div>
+
+        <div
+          style={{
+            position: "absolute",
+            left: 150,
+            top: 170,
+          }}
+        >
+          METRIC
+        </div>
+
+        <div
+          style={{
+            position: "absolute",
+            left: 260,
+            top: -5,
+            lineHeight: "24px",
+          }}
+        >
+          {METRIC_OPTIONS.map((option) => (
+            <div
+              key={option.layerId}
+              style={{
+                color:
+                  option.layerId === selectedLayerId
+                    ? "rgb(255, 70, 70)"
+                    : "white",
+                fontWeight: option.layerId === selectedLayerId ? "900" : "700",
+              }}
+            >
+              {option.label}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProjectionDeckMap(props) {
   const indexRef = useRef(0);
 
@@ -94,7 +399,9 @@ export default function ProjectionDeckMap(props) {
   const [layerInfo, setLayerInfo] = useState(null);
 
   const cityIOdata = props.cityIOdata;
-  const selectedLayerId = props.selectedLayerId || cityIOdata.selectedLayerId;
+  const selectedLayerId = canonicalLayerId(
+    props.selectedLayerId || cityIOdata.selectedLayerId
+  );
   const viewStateEditMode = props.viewStateEditMode;
   const GEOGRID = cityIOdata.GEOGRID;
 
@@ -180,10 +487,7 @@ export default function ProjectionDeckMap(props) {
 
     const l = [];
 
-    // Basemap first.
     const SHOW_BASEMAP = true;
-
-    // Grid must be pushed LAST so it appears above metrics.
     const SHOW_GRID_MESH = true;
 
     if (SHOW_BASEMAP) {
@@ -257,8 +561,9 @@ export default function ProjectionDeckMap(props) {
         <div
           style={{
             position: "absolute",
-            zIndex: 1,
+            zIndex: 4,
             bottom: 0,
+            left: 0,
             paddingLeft: 10,
             paddingRight: 10,
             margin: 10,
@@ -271,6 +576,11 @@ export default function ProjectionDeckMap(props) {
           <h3>{layerInfo}</h3>
         </div>
       )}
+
+      <ProjectionLegend
+        selectedLayerId={selectedLayerId}
+        cityIOdata={cityIOdata}
+      />
 
       <DeckMap
         header={cityIOdata.GEOGRID.properties.header}
