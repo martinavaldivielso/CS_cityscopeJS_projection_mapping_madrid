@@ -120,7 +120,8 @@ export const createGeoJsonLayer = (i, layer, GEOGRID) =>
       return [0, 0, 0, 160];
     },
 
-    getRadius: layer.properties?.getRadius ?? 100,
+    // MODIFIED: Read the direct feature property or fall back to 2 meters if undefined
+    getRadius: (f) => f.properties?.point_radius || layer.properties?.getRadius || 2,
     getLineWidth: layer.properties?.getLineWidth ?? 1,
     getElevation: (f) =>
       f.properties?.height ||
