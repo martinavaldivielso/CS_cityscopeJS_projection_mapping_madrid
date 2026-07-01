@@ -259,6 +259,23 @@ function getActiveBuildingInfo(cityIOdata) {
   };
 }
 
+function ControlsBackground() {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        zIndex: 10,
+        right: 0,
+        bottom: 0,
+        width: 460,
+        height: 270,
+        backgroundColor: "black",
+        pointerEvents: "none",
+      }}
+    />
+  );
+}
+
 function ProjectionLegend({ selectedLayerId, cityIOdata }) {
   // Position for your current projection configuration.
   // Increase LEGEND_LEFT to move right.
@@ -570,6 +587,8 @@ export default function ProjectionDeckMap(props) {
           <h3>{layerInfo}</h3>
         </div>
       )}
+
+      <ControlsBackground />
 
       <ProjectionLegend
         selectedLayerId={selectedLayerId}
