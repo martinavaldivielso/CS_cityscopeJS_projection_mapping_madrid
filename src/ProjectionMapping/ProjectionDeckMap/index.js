@@ -58,46 +58,27 @@ const METRIC_OPTIONS = [
   },
 ];
 
-const LAYER_ALIASES = {
-  AN: "accessToNature",
-  ACCESS_TO_NATURE: "accessToNature",
-  NATURE: "accessToNature",
-  A: "accessibility",
-  ACC: "accessibility",
-  GA: "accessibility",
-  ACCESSIBILITY: "accessibility",
-  GENERAL_ACCESSIBILITY: "accessibility",
-  RA: "restaurantAccessibility",
-  RESTAURANT: "restaurantAccessibility",
-  RESTAURANT_ACCESSIBILITY: "restaurantAccessibility",
-  PT: "publicTransitAccessibility",
-  PTA: "publicTransitAccessibility",
-  TRANSIT: "publicTransitAccessibility",
-  PUBLIC_TRANSIT: "publicTransitAccessibility",
-  PUBLIC_TRANSIT_ACCESSIBILITY: "publicTransitAccessibility",
-  UH: "urbanHeatH3",
-  UHI: "urbanHeatH3",
-  HEAT: "urbanHeatH3",
-  URBAN_HEAT: "urbanHeatH3",
-  URBAN_HEAT_H3: "urbanHeatH3",
-  URBAN_HEAT_HEATMAP: "urbanHeatHeatmap",
-};
-
-function normalizeLayerLabel(value) {
+function normalizeMetricLabel(value) {
   return String(value || "")
     .trim()
-    .replace(/[\s-]+/g, "_")
     .toUpperCase();
 }
 
-function canonicalLayerId(value) {
+function metricLayerIdFromTableValue(value) {
   if (!value) return null;
-  const normalized = normalizeLayerLabel(value);
-  return LAYER_ALIASES[normalized] || String(value).trim();
+
+  const rawValue = String(value).trim();
+  const selectedMetric = METRIC_OPTIONS.find(
+    (option) =>
+      normalizeMetricLabel(option.label) === normalizeMetricLabel(rawValue) ||
+      option.layerId === rawValue
+  );
+
+  return selectedMetric?.layerId || null;
 }
 
 function layerMatchesLabel(layer, label) {
-  const target = canonicalLayerId(label);
+  const target = metricLayerIdFromTableValue(label);
 
   if (!target || !layer) {
     return false;
@@ -105,20 +86,10 @@ function layerMatchesLabel(layer, label) {
 
   const candidates = [
     layer.id,
-    layer.name,
-    layer.label,
     layer.properties?.id,
-    layer.properties?.name,
-    layer.properties?.label,
   ].filter(Boolean);
 
-  return candidates.some((candidate) => {
-    const canonicalCandidate = canonicalLayerId(candidate);
-    return (
-      canonicalCandidate === target ||
-      normalizeLayerLabel(canonicalCandidate) === normalizeLayerLabel(target)
-    );
-  });
+  return candidates.some((candidate) => String(candidate).trim() === target);
 }
 
 function readHeightValue(cell) {
@@ -151,6 +122,27 @@ function readHeightValue(cell) {
   }
 
   return heightValue;
+}
+
+function readHeightSliderValue(cityIOdata) {
+  const rawHeight =
+    cityIOdata?.heightSlider ??
+    cityIOdata?.height_slider ??
+    cityIOdata?.sliderHeight ??
+    cityIOdata?.slider_height ??
+    cityIOdata?.heightValue ??
+    cityIOdata?.height_value ??
+    cityIOdata?.heightSensor ??
+    cityIOdata?.height_sensor ??
+    cityIOdata?.sensorHeight ??
+    cityIOdata?.sensor_height ??
+    cityIOdata?.height;
+
+  if (rawHeight === undefined || rawHeight === null) {
+    return null;
+  }
+
+  return readHeightValue({ height: rawHeight });
 }
 
 function normalizeColor(rawColor) {
@@ -196,10 +188,11 @@ function isActiveBuildingCell(cell) {
 
 function getActiveBuildingInfo(cityIOdata) {
   const geogridData = cityIOdata?.GEOGRIDDATA;
+  const heightSliderValue = readHeightSliderValue(cityIOdata);
 
   if (!Array.isArray(geogridData)) {
     return {
-      height: 0,
+      height: heightSliderValue ?? 0,
       color: [255, 255, 255],
       name: "Empty",
     };
@@ -260,7 +253,7 @@ function getActiveBuildingInfo(cityIOdata) {
     "Building";
 
   return {
-    height: maxHeight,
+    height: heightSliderValue ?? maxHeight,
     color,
     name,
   };
@@ -397,7 +390,8 @@ function ProjectionLegend({ selectedLayerId, cityIOdata }) {
                   option.layerId === selectedLayerId
                     ? "rgb(255, 70, 70)"
                     : "white",
-                fontWeight: option.layerId === selectedLayerId ? "900" : "700",
+                fontWeight:
+                  option.layerId === selectedLayerId ? "900" : "700",
               }}
             >
               {option.label}
@@ -416,8 +410,8 @@ export default function ProjectionDeckMap(props) {
   const [layerInfo, setLayerInfo] = useState(null);
 
   const cityIOdata = props.cityIOdata;
-  const selectedLayerId = canonicalLayerId(
-    props.selectedLayerId || cityIOdata.selectedLayerId
+  const selectedLayerId = metricLayerIdFromTableValue(
+    props.selectedLayerId || cityIOdata?.selectedLayerId
   );
   const viewStateEditMode = props.viewStateEditMode;
   const GEOGRID = cityIOdata.GEOGRID;
