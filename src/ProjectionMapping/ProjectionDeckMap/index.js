@@ -265,8 +265,8 @@ function ControlsBackground() {
       style={{
         position: "fixed",
         zIndex: 10,
-        right: 0,
-        bottom: 0,
+        left: 1100,
+        top: 630,
         width: 460,
         height: 270,
         backgroundColor: "black",
@@ -277,9 +277,6 @@ function ControlsBackground() {
 }
 
 function ProjectionLegend({ selectedLayerId, cityIOdata }) {
-  // Position for your current projection configuration.
-  // Increase LEGEND_LEFT to move right.
-  // Increase LEGEND_TOP to move down.
   const LEGEND_LEFT = 1240;
   const LEGEND_TOP = 660;
 
@@ -288,15 +285,14 @@ function ProjectionLegend({ selectedLayerId, cityIOdata }) {
   const activeColor = activeBuilding.color;
   const activeName = activeBuilding.name;
 
-  // Change this to match the maximum real slider height/floors.
-  const MAX_HEIGHT = 10;
-
+  // 1. Proportional Height Calculation
+  const MAX_HEIGHT = 10; // Change this if your real slider max floor value is different
   const heightRatio = Math.max(0, Math.min(1, activeHeight / MAX_HEIGHT));
 
-  // Smaller projected building, placed to the left of HEIGHT.
   const BUILDING_BASE_WIDTH = 24;
   const BUILDING_MIN_HEIGHT = 0;
-  const BUILDING_MAX_HEIGHT = 120;
+  
+  const BUILDING_MAX_HEIGHT = 140; 
 
   const projectedBuildingHeight =
     BUILDING_MIN_HEIGHT +
@@ -316,7 +312,6 @@ function ProjectionLegend({ selectedLayerId, cityIOdata }) {
         textShadow: "0 0 4px black, 0 0 8px black, 0 0 12px black",
       }}
     >
-
       <div
         style={{
           position: "relative",
@@ -325,14 +320,14 @@ function ProjectionLegend({ selectedLayerId, cityIOdata }) {
           fontSize: 14,
         }}
       >
-        {/* Smaller projected building height + type color, to the left of HEIGHT */}
+        {/* Height indicator bar*/}
         <div
           style={{
             position: "absolute",
-            left: -105,
-            bottom: 95,
+            left: -80,                  
+            bottom: 75,               
             width: BUILDING_BASE_WIDTH,
-            height: projectedBuildingHeight,
+            height: projectedBuildingHeight, 
             backgroundColor: `rgba(${activeColor[0]}, ${activeColor[1]}, ${activeColor[2]}, 0.95)`,
             border: "2px solid white",
             boxShadow: `0 0 8px rgba(${activeColor[0]}, ${activeColor[1]}, ${activeColor[2]}, 0.95), 0 0 10px black`,
@@ -340,15 +335,32 @@ function ProjectionLegend({ selectedLayerId, cityIOdata }) {
           }}
         />
 
+        {/* Dynamic Sensor Grid Square Projection */}
+        <div
+          style={{
+            position: "absolute",
+            left: 65,           
+            top: 55,            
+            width: 50,          
+            height: 50,
+            backgroundColor: `rgba(${activeColor[0]}, ${activeColor[1]}, ${activeColor[2]}, 0.85)`,
+            border: "2px solid rgba(255, 255, 255, 0.4)", 
+            boxShadow: `0 0 15px rgba(${activeColor[0]}, ${activeColor[1]}, ${activeColor[2]}, 0.6)`,
+            borderRadius: "2px",
+          }}
+        />
+
         {/* Building type label */}
         <div
           style={{
             position: "absolute",
-            left: -125,
-            bottom: 20,
-            width: 110,
+            left: 42,          
+            top: 115,           
+            width: 100,
             textAlign: "center",
-            fontSize: 10,
+            fontSize: 9,       
+            color: "rgba(255, 255, 255, 0.85)", 
+            fontWeight: "700",
           }}
         >
           {activeName}
@@ -377,9 +389,9 @@ function ProjectionLegend({ selectedLayerId, cityIOdata }) {
         <div
           style={{
             position: "absolute",
-            left: 260,
-            top: -5,
-            lineHeight: "24px",
+            left: 240,
+            top: 10,
+            lineHeight: "32px",
           }}
         >
           {METRIC_OPTIONS.map((option) => (
