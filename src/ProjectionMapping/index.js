@@ -36,9 +36,14 @@ export default function ProjectionMapping(props) {
     if (lastJsonMessage && lastJsonMessage.type === "TABLE_SNAPSHOT") {
       console.log("Socket open with", tableName, lastJsonMessage);
       const cityIOdata = lastJsonMessage.content;
-      setCityIOData(cityIOdata);
-      const numCols = cityIOdata.GEOGRID.properties.header.ncols;
-      const numRows = cityIOdata.GEOGRID.properties.header.nrows;
+      const snapshot = cityIOdata.snapshot || cityIOdata;
+
+      setCityIOData({
+        ...snapshot,
+        selectedLayerId: selectedLayerId || snapshot.selectedLayerId || null,
+      });
+      const numCols = snapshot.GEOGRID.properties.header.ncols;
+      const numRows = snapshot.GEOGRID.properties.header.nrows;
       setTableRatio(numCols / numRows);
       console.log("Table ratio: ", numCols / numRows);
     } else if (
@@ -48,7 +53,7 @@ export default function ProjectionMapping(props) {
     ) {
       const content = lastJsonMessage.content || {};
       const geogriddata = content.geogriddata || content.GEOGRIDDATA || content;
-      const layerID = content.layerID || content.layerId || content.layer_id;
+      const layerID = content.layerID;
 
       if (layerID) {
         setSelectedLayerId(layerID);
@@ -64,11 +69,7 @@ export default function ProjectionMapping(props) {
       // if the lastJsonMessage is of type "INDICATOR", log it
     } else if (lastJsonMessage && lastJsonMessage.type === "MODULE") {
       const moduleData = lastJsonMessage.content?.moduleData || {};
-      const layerID =
-        moduleData.selectedLayerId ||
-        moduleData.layerID ||
-        moduleData.layerId ||
-        moduleData.layer_id;
+      const layerID = moduleData.selectedLayerId;
 
       if (layerID) {
         setSelectedLayerId(layerID);

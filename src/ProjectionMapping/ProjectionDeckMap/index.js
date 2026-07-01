@@ -105,9 +105,15 @@ function layerMatchesLabel(layer, label) {
 
   const candidates = [
     layer.id,
+    layer.layerID,
+    layer.layerId,
+    layer.layer_id,
     layer.name,
     layer.label,
     layer.properties?.id,
+    layer.properties?.layerID,
+    layer.properties?.layerId,
+    layer.properties?.layer_id,
     layer.properties?.name,
     layer.properties?.label,
   ].filter(Boolean);
@@ -377,10 +383,13 @@ function ProjectionLegend({ selectedLayerId, cityIOdata }) {
               key={option.layerId}
               style={{
                 color:
-                  option.layerId === selectedLayerId
+                  canonicalLayerId(option.layerId) === selectedLayerId
                     ? "rgb(255, 70, 70)"
                     : "white",
-                fontWeight: option.layerId === selectedLayerId ? "900" : "700",
+                fontWeight:
+                  canonicalLayerId(option.layerId) === selectedLayerId
+                    ? "900"
+                    : "700",
               }}
             >
               {option.label}
@@ -400,7 +409,7 @@ export default function ProjectionDeckMap(props) {
 
   const cityIOdata = props.cityIOdata;
   const selectedLayerId = canonicalLayerId(
-    props.selectedLayerId || cityIOdata.selectedLayerId
+    props.selectedLayerId || cityIOdata?.selectedLayerId
   );
   const viewStateEditMode = props.viewStateEditMode;
   const GEOGRID = cityIOdata.GEOGRID;
