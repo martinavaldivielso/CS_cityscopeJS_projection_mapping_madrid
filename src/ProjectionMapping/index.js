@@ -62,6 +62,7 @@ export default function ProjectionMapping(props) {
       setCityIOData((prev) => {
         return {
           ...prev,
+          ...content,
           GEOGRIDDATA: geogriddata,
           selectedLayerId: layerID || prev?.selectedLayerId || null,
         };

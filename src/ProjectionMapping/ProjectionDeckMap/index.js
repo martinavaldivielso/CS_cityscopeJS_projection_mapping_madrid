@@ -124,6 +124,27 @@ function readHeightValue(cell) {
   return heightValue;
 }
 
+function readHeightSliderValue(cityIOdata) {
+  const rawHeight =
+    cityIOdata?.heightSlider ??
+    cityIOdata?.height_slider ??
+    cityIOdata?.sliderHeight ??
+    cityIOdata?.slider_height ??
+    cityIOdata?.heightValue ??
+    cityIOdata?.height_value ??
+    cityIOdata?.heightSensor ??
+    cityIOdata?.height_sensor ??
+    cityIOdata?.sensorHeight ??
+    cityIOdata?.sensor_height ??
+    cityIOdata?.height;
+
+  if (rawHeight === undefined || rawHeight === null) {
+    return null;
+  }
+
+  return readHeightValue({ height: rawHeight });
+}
+
 function normalizeColor(rawColor) {
   if (!rawColor) {
     return [255, 255, 255];
@@ -167,10 +188,11 @@ function isActiveBuildingCell(cell) {
 
 function getActiveBuildingInfo(cityIOdata) {
   const geogridData = cityIOdata?.GEOGRIDDATA;
+  const heightSliderValue = readHeightSliderValue(cityIOdata);
 
   if (!Array.isArray(geogridData)) {
     return {
-      height: 0,
+      height: heightSliderValue ?? 0,
       color: [255, 255, 255],
       name: "Empty",
     };
@@ -231,7 +253,7 @@ function getActiveBuildingInfo(cityIOdata) {
     "Building";
 
   return {
-    height: maxHeight,
+    height: heightSliderValue ?? maxHeight,
     color,
     name,
   };
