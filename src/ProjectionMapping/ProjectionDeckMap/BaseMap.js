@@ -3,11 +3,21 @@ import DeckGL from "@deck.gl/react";
 import ViewStateInputs from "../Components/ViewStateInputs";
 import "mapbox-gl/dist/mapbox-gl.css";
 
+function cloneDeckLayer(layer) {
+  if (!layer) return null;
+
+  if (typeof layer.clone === "function") {
+    return layer.clone({ id: layer.id });
+  }
+
+  return layer;
+}
+
 export default function BaseMap(props) {
   const header = props.header;
   const viewStateEditMode = props.viewStateEditMode;
   const layersArray = Array.isArray(props.layersArray)
-    ? props.layersArray.filter(Boolean)
+    ? props.layersArray.filter(Boolean).map(cloneDeckLayer).filter(Boolean)
     : [];
 
   const [viewState, setViewState] = useState(() => {
