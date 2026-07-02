@@ -6,23 +6,48 @@ import { getCityIOUrl } from "../settings/settings";
 
 const METRIC_CODES = new Set(["UH", "AN", "A", "RA", "PTA"]);
 
+function normalizeMetricCode(value) {
+  if (value === undefined || value === null) return null;
+
+  const code = String(value).trim().toUpperCase();
+  return METRIC_CODES.has(code) ? code : null;
+}
+
 function readMetricCode(source) {
   if (!source || typeof source !== "object") return null;
 
-  const rawValue =
-    source.layerID ??
-    source.layerId ??
-    source.layer_id ??
-    source.selectedLayerId ??
-    source.selected_layer_id ??
-    source.metricCode ??
-    source.metric_code ??
-    source.metric;
+  const candidates = [
+    source.layerID,
+    source.layerId,
+    source.layer_id,
+    source.selectedLayerId,
+    source.selected_layer_id,
+    source.metricCode,
+    source.metric_code,
+    source.metric,
+  ];
 
-  if (rawValue === undefined || rawValue === null) return null;
+  for (const candidate of candidates) {
+    const code = normalizeMetricCode(candidate);
+    if (code) return code;
+  }
 
-  const code = String(rawValue).trim().toUpperCase();
-  return METRIC_CODES.has(code) ? code : String(rawValue).trim();
+  return null;
+}
+
+function readMetricCodeFromMessage(message) {
+  if (!message || typeof message !== "object") return null;
+
+  const content = message.content || {};
+  const snapshot = content.snapshot || {};
+  const moduleData = content.moduleData || {};
+
+  return (
+    readMetricCode(content) ||
+    readMetricCode(snapshot) ||
+    readMetricCode(moduleData) ||
+    readMetricCode(message)
+  );
 }
 
 export default function ProjectionMapping(props) {
@@ -54,15 +79,24 @@ export default function ProjectionMapping(props) {
 
   // when lastJsonMessage updates, print it to the console
   useEffect(() => {
-    if (lastJsonMessage && lastJsonMessage.type === "TABLE_SNAPSHOT") {
+    if (!lastJsonMessage) return;
+
+    const incomingMetricCode = readMetricCodeFromMessage(lastJsonMessage);
+
+    if (incomingMetricCode) {
+      console.log("Table metric code selected:", incomingMetricCode, lastJsonMessage);
+      setSelectedLayerId(incomingMetricCode);
+      setCityIOData((prev) => ({
+        ...prev,
+        selectedLayerId: incomingMetricCode,
+      }));
+    }
+
+    if (lastJsonMessage.type === "TABLE_SNAPSHOT") {
       console.log("Socket open with", tableName, lastJsonMessage);
       const cityIOdata = lastJsonMessage.content;
       const snapshot = cityIOdata.snapshot || cityIOdata;
-      const metricCode = readMetricCode(snapshot) || readMetricCode(cityIOdata);
-
-      if (metricCode) {
-        setSelectedLayerId(metricCode);
-      }
+      const metricCode = incomingMetricCode;
 
       setCityIOData((prev) => ({
         ...snapshot,
@@ -73,17 +107,12 @@ export default function ProjectionMapping(props) {
       setTableRatio(numCols / numRows);
       console.log("Table ratio: ", numCols / numRows);
     } else if (
-      lastJsonMessage &&
-      (lastJsonMessage.type === "GEOGRIDDATA_UPDATE" ||
-        lastJsonMessage.type === "UPDATE_GRID")
+      lastJsonMessage.type === "GEOGRIDDATA_UPDATE" ||
+      lastJsonMessage.type === "UPDATE_GRID"
     ) {
       const content = lastJsonMessage.content || {};
       const geogriddata = content.geogriddata || content.GEOGRIDDATA || content;
-      const metricCode = readMetricCode(content);
-
-      if (metricCode) {
-        setSelectedLayerId(metricCode);
-      }
+      const metricCode = incomingMetricCode;
 
       setCityIOData((prev) => {
         return {
@@ -94,13 +123,9 @@ export default function ProjectionMapping(props) {
         };
       });
       // if the lastJsonMessage is of type "INDICATOR", log it
-    } else if (lastJsonMessage && lastJsonMessage.type === "MODULE") {
+    } else if (lastJsonMessage.type === "MODULE") {
       const moduleData = lastJsonMessage.content?.moduleData || {};
-      const metricCode = readMetricCode(moduleData);
-
-      if (metricCode) {
-        setSelectedLayerId(metricCode);
-      }
+      const metricCode = incomingMetricCode;
 
       // setCityIOData so that the INDICATOR nested data is updated
       setCityIOData((prev) => {
@@ -111,7 +136,7 @@ export default function ProjectionMapping(props) {
         };
       });
       // if the lastJsonMessage is of type "ERROR", log it
-    } else if (lastJsonMessage && lastJsonMessage.type === "ERROR") {
+    } else if (lastJsonMessage.type === "ERROR") {
       console.error("Error from CityIO", lastJsonMessage);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
