@@ -55,6 +55,27 @@ function metricLayerIdFromTableValue(value) {
   return selectedMetric?.layerId || null;
 }
 
+function metricValueFromCityIOData(cityIOdata) {
+  return (
+    cityIOdata?.selectedLayerId ??
+    cityIOdata?.selected_layer_id ??
+    cityIOdata?.layerID ??
+    cityIOdata?.layerId ??
+    cityIOdata?.layer_id ??
+    cityIOdata?.metricCode ??
+    cityIOdata?.metric_code ??
+    cityIOdata?.metric ??
+    cityIOdata?.moduleData?.selectedLayerId ??
+    cityIOdata?.moduleData?.layerID ??
+    cityIOdata?.moduleData?.layerId ??
+    cityIOdata?.moduleData?.metricCode ??
+    cityIOdata?.MODULE?.moduleData?.selectedLayerId ??
+    cityIOdata?.MODULE?.moduleData?.layerID ??
+    cityIOdata?.MODULE?.moduleData?.layerId ??
+    cityIOdata?.MODULE?.moduleData?.metricCode
+  );
+}
+
 function layerMatchesMetricId(layer, metricLayerId) {
   if (!layer || !metricLayerId) return false;
 
@@ -63,9 +84,13 @@ function layerMatchesMetricId(layer, metricLayerId) {
     layer.id,
     layer.name,
     layer.label,
+    layer.layerId,
+    layer.layerID,
     layer.properties?.id,
     layer.properties?.name,
     layer.properties?.label,
+    layer.properties?.layerId,
+    layer.properties?.layerID,
   ].filter(Boolean);
 
   return candidates.some((candidate) => normalizeMetricKey(candidate) === target);
@@ -316,9 +341,8 @@ export default function ProjectionDeckMap(props) {
 
   const cityIOdata = props.cityIOdata;
   const viewStateEditMode = props.viewStateEditMode;
-  const selectedLayerId = metricLayerIdFromTableValue(
-    props.selectedLayerId || cityIOdata?.selectedLayerId
-  );
+  const selectedMetricValue = props.selectedLayerId ?? metricValueFromCityIOData(cityIOdata);
+  const selectedLayerId = metricLayerIdFromTableValue(selectedMetricValue);
   const GEOGRID = cityIOdata?.GEOGRID;
 
   const getModuleLayers = (sourceData) => {
@@ -395,14 +419,20 @@ export default function ProjectionDeckMap(props) {
       console.warn(
         "No projection layer matched selected metric:",
         selectedLayerId,
+        "raw value:",
+        selectedMetricValue,
         currentLayers.map((layer) => ({
           id: layer.id,
           name: layer.name,
+          label: layer.label,
+          layerId: layer.layerId,
+          layerID: layer.layerID,
+          propertiesId: layer.properties?.id,
           propertiesName: layer.properties?.name,
           type: layer.type,
         }))
       );
-      return currentLayers[0];
+      return null;
     }
 
     return selectedLayer;
@@ -441,12 +471,13 @@ export default function ProjectionDeckMap(props) {
     const selectedLayer = findSelectedLayer(currentLayers);
     const selectedLayerIndex = selectedLayer ? currentLayers.indexOf(selectedLayer) : 0;
 
-    console.log("Projection selected metric:", selectedLayerId);
+    console.log("Projection selected metric raw:", selectedMetricValue);
+    console.log("Projection selected metric layerId:", selectedLayerId);
     console.log("Projection selected layer:", selectedLayer);
     console.log("Projection currentLayers:", currentLayers);
 
     if (!selectedLayer) {
-      setLayerInfo("No module layers found");
+      setLayerInfo(selectedLayerId ? `No layer matched ${selectedLayerId}` : "No module layers found");
       pushGridOnTop(layerArray);
       setLayersToRender(layerArray);
       return;
@@ -466,7 +497,7 @@ export default function ProjectionDeckMap(props) {
   useEffect(() => {
     createLayersArray();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cityIOdata, selectedLayerId]);
+  }, [cityIOdata, selectedLayerId, selectedMetricValue]);
 
   if (!cityIOdata || !GEOGRID) {
     return null;
@@ -499,6 +530,7 @@ export default function ProjectionDeckMap(props) {
       <ProjectionLegend selectedLayerId={selectedLayerId} cityIOdata={cityIOdata} />
 
       <DeckMap
+        key={`projection-deck-${selectedLayerId || "none"}`}
         header={cityIOdata.GEOGRID.properties.header}
         viewStateEditMode={viewStateEditMode}
         layersArray={layersToRender}
