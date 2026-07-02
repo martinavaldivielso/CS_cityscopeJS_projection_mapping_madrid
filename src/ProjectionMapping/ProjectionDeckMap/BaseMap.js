@@ -6,7 +6,9 @@ import "mapbox-gl/dist/mapbox-gl.css";
 export default function BaseMap(props) {
   const header = props.header;
   const viewStateEditMode = props.viewStateEditMode;
-  const layersArray = props.layersArray;
+  const layersArray = Array.isArray(props.layersArray)
+    ? props.layersArray.filter(Boolean)
+    : [];
 
   const [viewState, setViewState] = useState(() => {
     if (localStorage.getItem("projectionViewStateStorage")) {
