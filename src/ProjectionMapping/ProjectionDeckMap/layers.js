@@ -1,5 +1,5 @@
 import { HeatmapLayer } from "@deck.gl/aggregation-layers";
-import { GeoJsonLayer, PathLayer } from "@deck.gl/layers";
+import { GeoJsonLayer, PathLayer, TileLayer, BitmapLayer } from "@deck.gl/layers";
 import { H3ClusterLayer } from "@deck.gl/geo-layers";
 import { ArcLayer } from "@deck.gl/layers";
 
@@ -199,7 +199,30 @@ export const createPathLayer = (i, layer, GEOGRID) =>
     },
   });
 
-export const createTileLayer = () => null;
+export const createTileLayer = () => {
+  const tileUrl = "https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png";
+
+  return new TileLayer({
+    id: "base-map-layer",
+    data: tileUrl,
+    minZoom: 0,
+    maxZoom: 21,
+    tileSize: 256,
+
+    renderSubLayers: (props) => {
+      const {
+        bbox: { west, south, east, north },
+      } = props.tile;
+
+      return new BitmapLayer(props, {
+        id: `${props.id}-bitmap`,
+        data: null,
+        image: props.data,
+        bounds: [west, south, east, north],
+      });
+    },
+  });
+};
 
 export const createMeshLayer = (cityIOdata, GEOGRID) => {
   const geogridData = Array.isArray(cityIOdata.GEOGRIDDATA) ? cityIOdata.GEOGRIDDATA : [];
