@@ -107,34 +107,69 @@ export default function ProjectionMapping(props) {
       setTableRatio(numCols / numRows);
       console.log("Table ratio: ", numCols / numRows);
     } else if (
-      lastJsonMessage.type === "GEOGRIDDATA_UPDATE" ||
-      lastJsonMessage.type === "UPDATE_GRID"
-    ) {
-      const content = lastJsonMessage.content || {};
-      const geogriddata = content.geogriddata || content.GEOGRIDDATA || content;
-      const metricCode = incomingMetricCode;
+  lastJsonMessage.type === "GEOGRIDDATA_UPDATE" ||
+  lastJsonMessage.type === "UPDATE_GRID"
+) {
+  const content = lastJsonMessage.content || {};
+  const geogriddata = content.geogriddata || content.GEOGRIDDATA || content;
+  const metricCode = incomingMetricCode;
 
-      setCityIOData((prev) => {
-        return {
-          ...prev,
-          ...content,
-          GEOGRIDDATA: geogriddata,
-          selectedLayerId: metricCode || prev?.selectedLayerId || null,
-        };
-      });
+  setCityIOData((prev) => {
+    const selectedMetric =
+      metricCode ||
+      content.selectedLayerId ||
+      content.layerID ||
+      content.layerId ||
+      content.metricCode ||
+      prev?.selectedLayerId ||
+      null;
+
+    return {
+      ...prev,
+      ...content,
+      GEOGRIDDATA: geogriddata,
+
+      selectedLayerId: selectedMetric,
+      selected_layer_id: selectedMetric,
+      layerID: selectedMetric,
+      layerId: selectedMetric,
+      metricCode: selectedMetric,
+    };
+  });
       // if the lastJsonMessage is of type "INDICATOR", log it
     } else if (lastJsonMessage.type === "MODULE") {
-      const moduleData = lastJsonMessage.content?.moduleData || {};
+      const content = lastJsonMessage.content || {};
+      const moduleData = content.moduleData || {};
       const metricCode = incomingMetricCode;
 
-      // setCityIOData so that the INDICATOR nested data is updated
       setCityIOData((prev) => {
-        return {
-          ...prev,
-          LAYERS: moduleData.layers,
-          selectedLayerId: metricCode || prev?.selectedLayerId || null,
-        };
-      });
+      const selectedMetric =
+        metricCode ||
+        content.selectedLayerId ||
+        content.layerID ||
+        content.layerId ||
+        content.metricCode ||
+        moduleData.selectedLayerId ||
+        moduleData.layerID ||
+        moduleData.layerId ||
+        moduleData.metricCode ||
+        prev?.selectedLayerId ||
+        null;
+
+      return {
+        ...prev,
+        ...content,
+        moduleData,
+        MODULE: content,
+        LAYERS: moduleData.layers || content.layers || prev?.LAYERS,
+
+        selectedLayerId: selectedMetric,
+        selected_layer_id: selectedMetric,
+        layerID: selectedMetric,
+        layerId: selectedMetric,
+        metricCode: selectedMetric,
+      };
+    });
       // if the lastJsonMessage is of type "ERROR", log it
     } else if (lastJsonMessage.type === "ERROR") {
       console.error("Error from CityIO", lastJsonMessage);
