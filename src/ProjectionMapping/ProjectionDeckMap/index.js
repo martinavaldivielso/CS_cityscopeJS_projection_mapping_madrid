@@ -211,8 +211,8 @@ function ControlsBackground() {
       style={{
         position: "fixed",
         zIndex: 10,
-        left: 1100,
-        top: 630,
+        left: 1140,
+        top: 650,
         width: 460,
         height: 270,
         backgroundColor: "black",
@@ -263,8 +263,8 @@ function ProjectionLegend({ selectedLayerId, cityIOdata }) {
         <div
           style={{
             position: "absolute",
-            left: 65,
-            top: 55,
+            left: 78,
+            top: 65,
             width: 50,
             height: 50,
             backgroundColor: `rgba(${activeColor[0]}, ${activeColor[1]}, ${activeColor[2]}, 0.85)`,
@@ -278,7 +278,7 @@ function ProjectionLegend({ selectedLayerId, cityIOdata }) {
           style={{
             position: "absolute",
             left: 42,
-            top: 115,
+            top: 125,
             width: 100,
             textAlign: "center",
             fontSize: 9,
