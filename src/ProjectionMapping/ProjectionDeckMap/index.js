@@ -27,31 +27,11 @@ import { useState, useEffect } from "react";
 import { OBJLoader } from "@loaders.gl/obj";
 
 const METRIC_OPTIONS = [
-  {
-    label: "UH",
-    name: "Urban Heat",
-    layerId: "urbanHeatH3",
-  },
-  {
-    label: "AN",
-    name: "Access to Nature",
-    layerId: "accessToNature",
-  },
-  {
-    label: "A",
-    name: "Accessibility",
-    layerId: "accessibility",
-  },
-  {
-    label: "RA",
-    name: "Restaurant Accessibility",
-    layerId: "restaurantAccessibility",
-  },
-  {
-    label: "PTA",
-    name: "Public Transit Accessibility",
-    layerId: "publicTransitAccessibility",
-  },
+  { label: "UH", name: "Urban Heat", layerId: "urbanHeatH3" },
+  { label: "AN", name: "Access to Nature", layerId: "accessToNature" },
+  { label: "A", name: "Accessibility", layerId: "accessibility" },
+  { label: "RA", name: "Restaurant Accessibility", layerId: "restaurantAccessibility" },
+  { label: "PTA", name: "Public Transit Accessibility", layerId: "publicTransitAccessibility" },
 ];
 
 function normalizeMetricKey(value) {
@@ -64,14 +44,13 @@ function normalizeMetricKey(value) {
 function metricLayerIdFromTableValue(value) {
   if (!value) return null;
 
-  const selectedMetric = METRIC_OPTIONS.find((option) => {
-    const raw = normalizeMetricKey(value);
-    return (
+  const raw = normalizeMetricKey(value);
+  const selectedMetric = METRIC_OPTIONS.find(
+    (option) =>
       normalizeMetricKey(option.label) === raw ||
       normalizeMetricKey(option.name) === raw ||
       normalizeMetricKey(option.layerId) === raw
-    );
-  });
+  );
 
   return selectedMetric?.layerId || null;
 }
@@ -89,9 +68,7 @@ function layerMatchesMetricId(layer, metricLayerId) {
     layer.properties?.label,
   ].filter(Boolean);
 
-  return candidates.some(
-    (candidate) => normalizeMetricKey(candidate) === target
-  );
+  return candidates.some((candidate) => normalizeMetricKey(candidate) === target);
 }
 
 function readHeightValue(cell) {
@@ -108,7 +85,6 @@ function readHeightValue(cell) {
 
   let heightValue = 0;
 
-  // CityScope heights are often [min, current, max].
   if (Array.isArray(rawHeight)) {
     if (rawHeight.length >= 2) {
       heightValue = Number(rawHeight[1]);
@@ -119,11 +95,7 @@ function readHeightValue(cell) {
     heightValue = Number(rawHeight);
   }
 
-  if (Number.isNaN(heightValue)) {
-    return 0;
-  }
-
-  return heightValue;
+  return Number.isNaN(heightValue) ? 0 : heightValue;
 }
 
 function readHeightSliderValue(cityIOdata) {
@@ -140,18 +112,11 @@ function readHeightSliderValue(cityIOdata) {
     cityIOdata?.sensor_height ??
     cityIOdata?.height;
 
-  if (rawHeight === undefined || rawHeight === null) {
-    return null;
-  }
-
+  if (rawHeight === undefined || rawHeight === null) return null;
   return readHeightValue({ height: rawHeight });
 }
 
 function normalizeColor(rawColor) {
-  if (!rawColor) {
-    return [255, 255, 255];
-  }
-
   if (Array.isArray(rawColor)) {
     return [
       Number(rawColor[0]) || 0,
@@ -166,26 +131,10 @@ function normalizeColor(rawColor) {
 function isActiveBuildingCell(cell) {
   if (!cell) return false;
 
-  const name =
-    cell.name ||
-    cell.land_use ||
-    cell.type ||
-    cell.use ||
-    "";
-
+  const name = cell.name || cell.land_use || cell.type || cell.use || "";
   const text = String(name).toLowerCase();
 
-  if (
-    text === "" ||
-    text === "none" ||
-    text === "empty" ||
-    text === "0" ||
-    text === "0f"
-  ) {
-    return false;
-  }
-
-  return true;
+  return !["", "none", "empty", "0", "0f"].includes(text);
 }
 
 function getActiveBuildingInfo(cityIOdata) {
@@ -214,7 +163,6 @@ function getActiveBuildingInfo(cityIOdata) {
     }
   }
 
-  // Fallback: use the tallest cell even if the name is not recognized.
   if (!activeCell) {
     for (const cell of geogridData) {
       if (!cell) continue;
@@ -241,10 +189,7 @@ function getActiveBuildingInfo(cityIOdata) {
     activeCell.color_rgb ||
     activeCell.rgb ||
     activeCell.fillColor ||
-    activeCell.fill_color_rgb ||
-    [255, 255, 255];
-
-  const color = normalizeColor(rawColor);
+    activeCell.fill_color_rgb;
 
   const name =
     activeCell.name ||
@@ -255,7 +200,7 @@ function getActiveBuildingInfo(cityIOdata) {
 
   return {
     height: heightSliderValue ?? maxHeight,
-    color,
+    color: normalizeColor(rawColor),
     name,
   };
 }
@@ -278,32 +223,21 @@ function ControlsBackground() {
 }
 
 function ProjectionLegend({ selectedLayerId, cityIOdata }) {
-  const LEGEND_LEFT = 1240;
-  const LEGEND_TOP = 660;
-
   const activeBuilding = getActiveBuildingInfo(cityIOdata);
   const activeHeight = activeBuilding.height;
   const activeColor = activeBuilding.color;
   const activeName = activeBuilding.name;
 
-  const MAX_HEIGHT = 10;
-  const heightRatio = Math.max(0, Math.min(1, activeHeight / MAX_HEIGHT));
-
-  const BUILDING_BASE_WIDTH = 24;
-  const BUILDING_MIN_HEIGHT = 0;
-  const BUILDING_MAX_HEIGHT = 140;
-
-  const projectedBuildingHeight =
-    BUILDING_MIN_HEIGHT +
-    heightRatio * (BUILDING_MAX_HEIGHT - BUILDING_MIN_HEIGHT);
+  const heightRatio = Math.max(0, Math.min(1, activeHeight / 10));
+  const projectedBuildingHeight = heightRatio * 140;
 
   return (
     <div
       style={{
         position: "fixed",
         zIndex: 20,
-        left: LEGEND_LEFT,
-        top: LEGEND_TOP,
+        left: 1240,
+        top: 660,
         color: "white",
         fontFamily: "sans-serif, helvetica, arial",
         fontWeight: "900",
@@ -311,20 +245,13 @@ function ProjectionLegend({ selectedLayerId, cityIOdata }) {
         textShadow: "0 0 4px black, 0 0 8px black, 0 0 12px black",
       }}
     >
-      <div
-        style={{
-          position: "relative",
-          width: 360,
-          height: 230,
-          fontSize: 14,
-        }}
-      >
+      <div style={{ position: "relative", width: 360, height: 230, fontSize: 14 }}>
         <div
           style={{
             position: "absolute",
             left: -80,
             bottom: 75,
-            width: BUILDING_BASE_WIDTH,
+            width: 24,
             height: projectedBuildingHeight,
             backgroundColor: `rgba(${activeColor[0]}, ${activeColor[1]}, ${activeColor[2]}, 0.95)`,
             border: "2px solid white",
@@ -362,44 +289,16 @@ function ProjectionLegend({ selectedLayerId, cityIOdata }) {
           {activeName}
         </div>
 
-        <div
-          style={{
-            position: "absolute",
-            left: -35,
-            top: 170,
-          }}
-        >
-          HEIGHT
-        </div>
+        <div style={{ position: "absolute", left: -35, top: 170 }}>HEIGHT</div>
+        <div style={{ position: "absolute", left: 150, top: 170 }}>METRIC</div>
 
-        <div
-          style={{
-            position: "absolute",
-            left: 150,
-            top: 170,
-          }}
-        >
-          METRIC
-        </div>
-
-        <div
-          style={{
-            position: "absolute",
-            left: 240,
-            top: 10,
-            lineHeight: "32px",
-          }}
-        >
+        <div style={{ position: "absolute", left: 240, top: 10, lineHeight: "32px" }}>
           {METRIC_OPTIONS.map((option) => (
             <div
               key={option.layerId}
               style={{
-                color:
-                  option.layerId === selectedLayerId
-                    ? "rgb(255, 70, 70)"
-                    : "white",
-                fontWeight:
-                  option.layerId === selectedLayerId ? "900" : "700",
+                color: option.layerId === selectedLayerId ? "rgb(255, 70, 70)" : "white",
+                fontWeight: option.layerId === selectedLayerId ? "900" : "700",
               }}
             >
               {option.label}
@@ -420,12 +319,7 @@ export default function ProjectionDeckMap(props) {
   const selectedLayerId = metricLayerIdFromTableValue(
     props.selectedLayerId || cityIOdata?.selectedLayerId
   );
-
-  if (!cityIOdata?.GEOGRID) {
-    return null;
-  }
-
-  const GEOGRID = cityIOdata.GEOGRID;
+  const GEOGRID = cityIOdata?.GEOGRID;
 
   const getModuleLayers = (sourceData) => {
     if (!sourceData) return [];
@@ -473,6 +367,8 @@ export default function ProjectionDeckMap(props) {
   };
 
   const pushGridOnTop = (layerArray) => {
+    if (!cityIOdata || !GEOGRID) return;
+
     const gridLayers = createMeshLayer(cityIOdata, GEOGRID, OBJLoader);
 
     if (Array.isArray(gridLayers)) {
@@ -513,27 +409,17 @@ export default function ProjectionDeckMap(props) {
   };
 
   const createDeckLayer = (layerIndex, layer) => {
+    if (!GEOGRID || !layer) return null;
+
     const layerType = layer.type;
 
-    if (layerType === "heatmap") {
-      return createHeatmapLayer(layerIndex, layer, GEOGRID);
-    }
-
-    if (layerType === "arc") {
-      return createArcLayer(layerIndex, layer, GEOGRID);
-    }
-
+    if (layerType === "heatmap") return createHeatmapLayer(layerIndex, layer, GEOGRID);
+    if (layerType === "arc") return createArcLayer(layerIndex, layer, GEOGRID);
     if (layerType === "geojson" || layerType === "geojsonbase") {
       return createGeoJsonLayer(layerIndex, layer, GEOGRID);
     }
-
-    if (layerType === "path") {
-      return createPathLayer(layerIndex, layer, GEOGRID);
-    }
-
-    if (layerType === "h3cluster") {
-      return createH3ClusterLayer(layerIndex, layer, GEOGRID);
-    }
+    if (layerType === "path") return createPathLayer(layerIndex, layer, GEOGRID);
+    if (layerType === "h3cluster") return createH3ClusterLayer(layerIndex, layer, GEOGRID);
 
     console.error("Layer type not supported:", layerType, layer);
     setLayerInfo(`Layer type not yet supported: ${layerType}`);
@@ -541,22 +427,19 @@ export default function ProjectionDeckMap(props) {
   };
 
   const createLayersArray = () => {
+    if (!cityIOdata || !GEOGRID) {
+      setLayersToRender([]);
+      setLayerInfo(null);
+      return;
+    }
+
     const styles = settings.map.mapStyles;
     const mapStyle = styles.Light;
-
-    const layerArray = [];
-    const SHOW_BASEMAP = true;
-    const SHOW_GRID_MESH = true;
-
-    if (SHOW_BASEMAP) {
-      layerArray.push(createTileLayer(mapStyle));
-    }
+    const layerArray = [createTileLayer(mapStyle)];
 
     const currentLayers = getModuleLayers(cityIOdata);
     const selectedLayer = findSelectedLayer(currentLayers);
-    const selectedLayerIndex = selectedLayer
-      ? currentLayers.indexOf(selectedLayer)
-      : 0;
+    const selectedLayerIndex = selectedLayer ? currentLayers.indexOf(selectedLayer) : 0;
 
     console.log("Projection selected metric:", selectedLayerId);
     console.log("Projection selected layer:", selectedLayer);
@@ -564,11 +447,7 @@ export default function ProjectionDeckMap(props) {
 
     if (!selectedLayer) {
       setLayerInfo("No module layers found");
-
-      if (SHOW_GRID_MESH) {
-        pushGridOnTop(layerArray);
-      }
-
+      pushGridOnTop(layerArray);
       setLayersToRender(layerArray);
       return;
     }
@@ -580,10 +459,7 @@ export default function ProjectionDeckMap(props) {
       layerArray.push(deckLayer);
     }
 
-    if (SHOW_GRID_MESH) {
-      pushGridOnTop(layerArray);
-    }
-
+    pushGridOnTop(layerArray);
     setLayersToRender(layerArray);
   };
 
@@ -591,6 +467,10 @@ export default function ProjectionDeckMap(props) {
     createLayersArray();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cityIOdata, selectedLayerId]);
+
+  if (!cityIOdata || !GEOGRID) {
+    return null;
+  }
 
   return (
     <>
@@ -616,10 +496,7 @@ export default function ProjectionDeckMap(props) {
 
       <ControlsBackground />
 
-      <ProjectionLegend
-        selectedLayerId={selectedLayerId}
-        cityIOdata={cityIOdata}
-      />
+      <ProjectionLegend selectedLayerId={selectedLayerId} cityIOdata={cityIOdata} />
 
       <DeckMap
         header={cityIOdata.GEOGRID.properties.header}
