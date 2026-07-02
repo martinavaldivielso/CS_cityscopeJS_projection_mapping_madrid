@@ -1,6 +1,6 @@
 import { HeatmapLayer } from "@deck.gl/aggregation-layers";
-import { GeoJsonLayer, PathLayer, TileLayer, BitmapLayer } from "@deck.gl/layers";
-import { H3ClusterLayer } from "@deck.gl/geo-layers";
+import { GeoJsonLayer, PathLayer, BitmapLayer } from "@deck.gl/layers";
+import { TileLayer, H3ClusterLayer } from "@deck.gl/geo-layers";
 import { ArcLayer } from "@deck.gl/layers";
 
 /**
