@@ -4,6 +4,27 @@ import Keystoner from "./Components/Keystoner";
 import useWebSocket, { ReadyState } from "react-use-websocket";
 import { getCityIOUrl } from "../settings/settings";
 
+const METRIC_CODES = new Set(["UH", "AN", "A", "RA", "PTA"]);
+
+function readMetricCode(source) {
+  if (!source || typeof source !== "object") return null;
+
+  const rawValue =
+    source.layerID ??
+    source.layerId ??
+    source.layer_id ??
+    source.selectedLayerId ??
+    source.selected_layer_id ??
+    source.metricCode ??
+    source.metric_code ??
+    source.metric;
+
+  if (rawValue === undefined || rawValue === null) return null;
+
+  const code = String(rawValue).trim().toUpperCase();
+  return METRIC_CODES.has(code) ? code : String(rawValue).trim();
+}
+
 export default function ProjectionMapping(props) {
   const tableName = props.tableName;
   // state to store the cityIO data
@@ -37,11 +58,16 @@ export default function ProjectionMapping(props) {
       console.log("Socket open with", tableName, lastJsonMessage);
       const cityIOdata = lastJsonMessage.content;
       const snapshot = cityIOdata.snapshot || cityIOdata;
+      const metricCode = readMetricCode(snapshot) || readMetricCode(cityIOdata);
 
-      setCityIOData({
+      if (metricCode) {
+        setSelectedLayerId(metricCode);
+      }
+
+      setCityIOData((prev) => ({
         ...snapshot,
-        selectedLayerId: selectedLayerId || snapshot.selectedLayerId || null,
-      });
+        selectedLayerId: metricCode || prev?.selectedLayerId || null,
+      }));
       const numCols = snapshot.GEOGRID.properties.header.ncols;
       const numRows = snapshot.GEOGRID.properties.header.nrows;
       setTableRatio(numCols / numRows);
@@ -53,10 +79,10 @@ export default function ProjectionMapping(props) {
     ) {
       const content = lastJsonMessage.content || {};
       const geogriddata = content.geogriddata || content.GEOGRIDDATA || content;
-      const layerID = content.layerID;
+      const metricCode = readMetricCode(content);
 
-      if (layerID) {
-        setSelectedLayerId(layerID);
+      if (metricCode) {
+        setSelectedLayerId(metricCode);
       }
 
       setCityIOData((prev) => {
@@ -64,16 +90,16 @@ export default function ProjectionMapping(props) {
           ...prev,
           ...content,
           GEOGRIDDATA: geogriddata,
-          selectedLayerId: layerID || prev?.selectedLayerId || null,
+          selectedLayerId: metricCode || prev?.selectedLayerId || null,
         };
       });
       // if the lastJsonMessage is of type "INDICATOR", log it
     } else if (lastJsonMessage && lastJsonMessage.type === "MODULE") {
       const moduleData = lastJsonMessage.content?.moduleData || {};
-      const layerID = moduleData.selectedLayerId;
+      const metricCode = readMetricCode(moduleData);
 
-      if (layerID) {
-        setSelectedLayerId(layerID);
+      if (metricCode) {
+        setSelectedLayerId(metricCode);
       }
 
       // setCityIOData so that the INDICATOR nested data is updated
@@ -81,7 +107,7 @@ export default function ProjectionMapping(props) {
         return {
           ...prev,
           LAYERS: moduleData.layers,
-          selectedLayerId: layerID || prev?.selectedLayerId || null,
+          selectedLayerId: metricCode || prev?.selectedLayerId || null,
         };
       });
       // if the lastJsonMessage is of type "ERROR", log it
