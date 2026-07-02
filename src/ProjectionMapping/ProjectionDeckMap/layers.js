@@ -1,11 +1,7 @@
 import { HeatmapLayer } from "@deck.gl/aggregation-layers";
 import { GeoJsonLayer, PathLayer } from "@deck.gl/layers";
-import { TileLayer, H3ClusterLayer } from "@deck.gl/geo-layers";
-import { BitmapLayer } from "@deck.gl/layers";
-import { SimpleMeshLayer } from "deck.gl";
+import { H3ClusterLayer } from "@deck.gl/geo-layers";
 import { ArcLayer } from "@deck.gl/layers";
-import { CubeGeometry } from "@luma.gl/core";
-import { TextLayer } from "@deck.gl/layers";
 
 /**
  * Converts a hex string to a RGB or RGBA array.
@@ -15,16 +11,6 @@ import { TextLayer } from "@deck.gl/layers";
 function hex_to_rgba(hex) {
   const rgba = hex.match(/[0-9a-f]{2}/gi).map((x) => parseInt(x, 16));
   return rgba.length === 4 ? rgba : rgba.slice(0, 3);
-}
-
-function featureCenter(feature) {
-  const coordinates = feature?.geometry?.coordinates?.[0];
-  if (!Array.isArray(coordinates) || coordinates.length < 3) return [0, 0, 0];
-
-  const first = coordinates[1] || coordinates[0];
-  const last = coordinates[coordinates.length - 2] || coordinates[coordinates.length - 1];
-
-  return [(first[0] + last[0]) / 2, (first[1] + last[1]) / 2, 20];
 }
 
 function safeCellProperties(cell, fallbackId) {
@@ -198,7 +184,8 @@ export const createPathLayer = (i, layer, GEOGRID) =>
     lineWidthMaxPixels: layer.properties?.lineWidthMaxPixels || 14,
 
     opacity: layer.properties?.opacity ?? 0.95,
-    rounded: layer.properties?.rounded ?? true,
+    capRounded: layer.properties?.capRounded ?? true,
+    jointRounded: layer.properties?.jointRounded ?? true,
     pickable: true,
 
     parameters: {
@@ -212,104 +199,45 @@ export const createPathLayer = (i, layer, GEOGRID) =>
     },
   });
 
-export const createTileLayer = (mapStyle) => {
-  const tileUrl = "https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png";
+export const createTileLayer = () => null;
 
-  return new TileLayer({
-    id: "base-map-layer",
-    data: tileUrl,
-    minZoom: 0,
-    maxZoom: 21,
-    tileSize: 256,
-
-    renderSubLayers: (props) => {
-      const {
-        bbox: { west, south, east, north },
-      } = props.tile;
-
-      return new BitmapLayer(props, {
-        data: null,
-        image: props.data,
-        bounds: [west, south, east, north],
-      });
-    },
-  });
-};
-
-export const createMeshLayer = (cityIOdata, GEOGRID, OBJLoader) => {
-  const cube = new CubeGeometry({ type: "x,z", xlen: 1, ylen: 1, zlen: 1 });
-  const header = GEOGRID.properties.header;
+export const createMeshLayer = (cityIOdata, GEOGRID) => {
   const geogridData = Array.isArray(cityIOdata.GEOGRIDDATA) ? cityIOdata.GEOGRIDDATA : [];
   const features = (GEOGRID.features || []).map((feature, index) => ({
     ...feature,
     properties: safeCellProperties(geogridData[index] || feature.properties, index),
   }));
 
-  const meshLayer = new SimpleMeshLayer({
+  return new GeoJsonLayer({
     id: "grid-layer",
-    data: features,
-    loaders: [OBJLoader],
+    data: {
+      type: "FeatureCollection",
+      features,
+    },
+    pickable: false,
+    stroked: true,
+    filled: true,
+    extruded: false,
     opacity: 1,
-    mesh: cube,
+    lineWidthMinPixels: 1,
 
     parameters: {
       depthTest: false,
     },
 
-    getPosition: (d) => featureCenter(d),
-
-    getColor: (d) => {
-      const color = Array.isArray(d.properties?.color) ? d.properties.color : [255, 255, 255];
-      return [color[0], color[1], color[2], 255];
+    getFillColor: (feature) => {
+      const color = Array.isArray(feature.properties?.color)
+        ? feature.properties.color
+        : [255, 255, 255];
+      return [color[0], color[1], color[2], 230];
     },
 
-    getOrientation: () => [-180, header.rotation || 0, -90],
-
-    getScale: () => [
-      GEOGRID.properties.header.cellSize / 2.1,
-      1,
-      GEOGRID.properties.header.cellSize / 2.1,
-    ],
+    getLineColor: [0, 0, 0, 220],
 
     updateTriggers: {
-      getScale: geogridData,
-      getColor: geogridData,
+      getFillColor: geogridData,
     },
   });
-
-  const textLayer = new TextLayer({
-    id: "text-layer",
-    data: features,
-
-    parameters: {
-      depthTest: false,
-    },
-
-    getPosition: (d) => {
-      const [x, y] = featureCenter(d);
-      return [x, y, 30];
-    },
-
-    getText: (d) =>
-      d.properties?.name?.slice(0, 2) ||
-      d.properties?.type?.toString().slice(0, 2) ||
-      d.properties?.id?.toString().slice(0, 2) ||
-      "",
-
-    getSize: 10,
-
-    getColor: (d) => {
-      const color = Array.isArray(d.properties?.color) ? d.properties.color : [255, 255, 255];
-      return [255 - color[0], 255 - color[1], 255 - color[2], 255];
-    },
-
-    updateTriggers: {
-      getText: geogridData,
-      getColor: geogridData,
-    },
-  });
-
-  return [meshLayer, textLayer];
 };
 
 // arc layer
