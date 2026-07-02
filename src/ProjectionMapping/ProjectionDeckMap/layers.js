@@ -17,6 +17,27 @@ function hex_to_rgba(hex) {
   return rgba.length === 4 ? rgba : rgba.slice(0, 3);
 }
 
+function featureCenter(feature) {
+  const coordinates = feature?.geometry?.coordinates?.[0];
+  if (!Array.isArray(coordinates) || coordinates.length < 3) return [0, 0, 0];
+
+  const first = coordinates[1] || coordinates[0];
+  const last = coordinates[coordinates.length - 2] || coordinates[coordinates.length - 1];
+
+  return [(first[0] + last[0]) / 2, (first[1] + last[1]) / 2, 20];
+}
+
+function safeCellProperties(cell, fallbackId) {
+  const source = cell && typeof cell === "object" ? cell : {};
+  const color = Array.isArray(source.color) ? source.color : [255, 255, 255];
+
+  return {
+    ...source,
+    color,
+    id: source.id ?? fallbackId,
+  };
+}
+
 export const createHeatmapLayer = (i, layer, GEOGRID) =>
   new HeatmapLayer({
     id: `heatmap-layer-${i}-${layer.id || "module"}`,
@@ -63,7 +84,6 @@ export const createH3ClusterLayer = (i, layer, GEOGRID) =>
     filled: layer.properties?.filled ?? true,
     pickable: true,
 
-    // Important: keep the H3 metric layer behind the interactive grid overlay.
     parameters: {
       depthTest: false,
     },
@@ -217,112 +237,75 @@ export const createTileLayer = (mapStyle) => {
 };
 
 export const createMeshLayer = (cityIOdata, GEOGRID, OBJLoader) => {
-  const cube = new CubeGeometry({ type: "x,z", xlen: 0, ylen: 0, zlen: 0 });
-
+  const cube = new CubeGeometry({ type: "x,z", xlen: 1, ylen: 1, zlen: 1 });
   const header = GEOGRID.properties.header;
-
-  /*
-  Replace every GEOGRID.features[x].properties with cityIOdata.GEOGRIDDATA[x]
-  to update the properties of each grid cell.
-  */
-  for (let i = 0; i < GEOGRID.features?.length; i++) {
-    GEOGRID.features[i].properties = cityIOdata.GEOGRIDDATA[i];
-
-    GEOGRID.features[i].properties = {
-      ...GEOGRID.features[i].properties,
-      id: i,
-    };
-  }
+  const geogridData = Array.isArray(cityIOdata.GEOGRIDDATA) ? cityIOdata.GEOGRIDDATA : [];
+  const features = (GEOGRID.features || []).map((feature, index) => ({
+    ...feature,
+    properties: safeCellProperties(geogridData[index] || feature.properties, index),
+  }));
 
   const meshLayer = new SimpleMeshLayer({
     id: "grid-layer",
-    data: GEOGRID.features,
+    data: features,
     loaders: [OBJLoader],
-
-    // Make the interactive grid clearly visible above metrics.
     opacity: 1,
     mesh: cube,
 
-    // This makes the grid draw as an overlay above H3/path/geojson metric layers.
     parameters: {
       depthTest: false,
     },
 
-    getPosition: (d) => {
-      const pntArr = d.geometry.coordinates[0];
-      const first = pntArr[1];
-      const last = pntArr[pntArr.length - 2];
-
-      // Positive z keeps the grid visually above the metric layer.
-      return [
-        (first[0] + last[0]) / 2,
-        (first[1] + last[1]) / 2,
-        20,
-      ];
-    },
+    getPosition: (d) => featureCenter(d),
 
     getColor: (d) => {
-      const color = d.properties.color || [255, 255, 255];
+      const color = Array.isArray(d.properties?.color) ? d.properties.color : [255, 255, 255];
       return [color[0], color[1], color[2], 255];
     },
 
-    getOrientation: (d) => [-180, header.rotation, -90],
+    getOrientation: () => [-180, header.rotation || 0, -90],
 
-    // Lower divisor = bigger projected grid cells.
-    // 2.1 is your current size. Use 1.8 or 1.6 for bigger blocks.
-    getScale: (d) => [
+    getScale: () => [
       GEOGRID.properties.header.cellSize / 2.1,
       1,
       GEOGRID.properties.header.cellSize / 2.1,
     ],
 
     updateTriggers: {
-      getScale: GEOGRID,
-      getColor: GEOGRID,
+      getScale: geogridData,
+      getColor: geogridData,
     },
   });
 
   const textLayer = new TextLayer({
     id: "text-layer",
-    data: GEOGRID.features,
+    data: features,
 
     parameters: {
       depthTest: false,
     },
 
     getPosition: (d) => {
-      const pntArr = d.geometry.coordinates[0];
-      const first = pntArr[1];
-      const last = pntArr[pntArr.length - 2];
-
-      return [
-        (first[0] + last[0]) / 2,
-        (first[1] + last[1]) / 2,
-        30,
-      ];
+      const [x, y] = featureCenter(d);
+      return [x, y, 30];
     },
 
     getText: (d) =>
-      d.properties.name?.slice(0, 2) ||
-      d.properties.id?.toString().slice(0, 2) ||
-      null,
+      d.properties?.name?.slice(0, 2) ||
+      d.properties?.type?.toString().slice(0, 2) ||
+      d.properties?.id?.toString().slice(0, 2) ||
+      "",
 
     getSize: 10,
 
     getColor: (d) => {
-      const color = d.properties.color || [255, 255, 255];
-
-      return [
-        255 - color[0],
-        255 - color[1],
-        255 - color[2],
-        255,
-      ];
+      const color = Array.isArray(d.properties?.color) ? d.properties.color : [255, 255, 255];
+      return [255 - color[0], 255 - color[1], 255 - color[2], 255];
     },
 
     updateTriggers: {
-      getText: GEOGRID,
-      getColor: GEOGRID,
+      getText: geogridData,
+      getColor: geogridData,
     },
   });
 
