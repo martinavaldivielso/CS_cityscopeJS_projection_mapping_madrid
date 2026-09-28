@@ -123,34 +123,71 @@ function readHeightValue(cell) {
   return Number.isNaN(heightValue) ? 0 : heightValue;
 }
 
-function readHeightSliderValue(cityIOdata) {
-  const rawHeight =
-    cityIOdata?.heightSlider ??
-    cityIOdata?.height_slider ??
-    cityIOdata?.sliderHeight ??
-    cityIOdata?.slider_height ??
-    cityIOdata?.heightValue ??
-    cityIOdata?.height_value ??
-    cityIOdata?.heightSensor ??
-    cityIOdata?.height_sensor ??
-    cityIOdata?.sensorHeight ??
-    cityIOdata?.sensor_height ??
-    cityIOdata?.height;
-
-  if (rawHeight === undefined || rawHeight === null) return null;
-  return readHeightValue({ height: rawHeight });
-}
-
-function normalizeColor(rawColor) {
+function parseColorValue(rawColor) {
   if (Array.isArray(rawColor)) {
-    return [
+    const color = [
       Number(rawColor[0]) || 0,
       Number(rawColor[1]) || 0,
       Number(rawColor[2]) || 0,
     ];
+    return color;
   }
 
-  return [255, 255, 255];
+  if (rawColor && typeof rawColor === "object") {
+    const nestedColor =
+      rawColor.rgb ||
+      rawColor.rgba ||
+      rawColor.color ||
+      rawColor.color_rgb ||
+      rawColor.fillColor ||
+      rawColor.fill_color_rgb;
+
+    if (nestedColor && nestedColor !== rawColor) {
+      const parsedNestedColor = parseColorValue(nestedColor);
+      if (parsedNestedColor) return parsedNestedColor;
+    }
+
+    const r = rawColor.r ?? rawColor.red ?? rawColor[0];
+    const g = rawColor.g ?? rawColor.green ?? rawColor[1];
+    const b = rawColor.b ?? rawColor.blue ?? rawColor[2];
+
+    if (r !== undefined && g !== undefined && b !== undefined) {
+      return [Number(r) || 0, Number(g) || 0, Number(b) || 0];
+    }
+  }
+
+  if (typeof rawColor === "string") {
+    const trimmed = rawColor.trim();
+
+    if (trimmed.startsWith("#")) {
+      const hex = trimmed.replace("#", "");
+      if (hex.length === 3) {
+        return hex.split("").map((value) => parseInt(value + value, 16));
+      }
+      if (hex.length >= 6) {
+        return [
+          parseInt(hex.slice(0, 2), 16),
+          parseInt(hex.slice(2, 4), 16),
+          parseInt(hex.slice(4, 6), 16),
+        ];
+      }
+    }
+
+    const numbers = trimmed.match(/\d+(\.\d+)?/g);
+    if (numbers && numbers.length >= 3) {
+      return [Number(numbers[0]) || 0, Number(numbers[1]) || 0, Number(numbers[2]) || 0];
+    }
+  }
+
+  return null;
+}
+
+function normalizeColor(rawColor, fallback = [255, 255, 255]) {
+  return parseColorValue(rawColor) || fallback;
+}
+
+function isBlackColor(color) {
+  return Array.isArray(color) && color[0] === 0 && color[1] === 0 && color[2] === 0;
 }
 
 function findSensorBlockCell(geogridData) {
@@ -170,19 +207,57 @@ function getCellDisplayName(cell) {
     cell?.land_use ||
     cell?.type ||
     cell?.use ||
+    cell?.piece ||
+    cell?.pieceType ||
+    cell?.piece_type ||
     "Sensor block"
   );
 }
 
-function getCellDisplayColor(cell) {
-  const rawColor =
-    cell?.color ||
-    cell?.color_rgb ||
-    cell?.rgb ||
-    cell?.fillColor ||
-    cell?.fill_color_rgb;
+function getRawCellColor(cell) {
+  return (
+    cell?.pieceColor ??
+    cell?.piece_color ??
+    cell?.readPieceColor ??
+    cell?.read_piece_color ??
+    cell?.displayColor ??
+    cell?.display_color ??
+    cell?.buildingColor ??
+    cell?.building_color ??
+    cell?.fillColor ??
+    cell?.fill_color_rgb ??
+    cell?.color_rgb ??
+    cell?.rgb ??
+    cell?.color
+  );
+}
 
-  return normalizeColor(rawColor);
+function findMatchingPieceColor(sensorBlockCell, geogridData) {
+  if (!sensorBlockCell || !Array.isArray(geogridData)) return null;
+
+  const sensorLabel = normalizeMetricKey(getCellDisplayName(sensorBlockCell));
+  if (!sensorLabel || sensorLabel === normalizeMetricKey("Sensor block")) return null;
+
+  for (const cell of geogridData) {
+    if (!cell || cell === sensorBlockCell || String(cell.id) === "99") continue;
+    if (normalizeMetricKey(getCellDisplayName(cell)) !== sensorLabel) continue;
+
+    const parsedColor = parseColorValue(getRawCellColor(cell));
+    if (parsedColor && !isBlackColor(parsedColor)) return parsedColor;
+  }
+
+  return null;
+}
+
+function getCellDisplayColor(cell, geogridData) {
+  const directColor = parseColorValue(getRawCellColor(cell));
+  const matchingPieceColor = findMatchingPieceColor(cell, geogridData);
+
+  if (matchingPieceColor && (!directColor || isBlackColor(directColor))) {
+    return matchingPieceColor;
+  }
+
+  return directColor || matchingPieceColor || [255, 255, 255];
 }
 
 function getActiveBuildingInfo(cityIOdata) {
@@ -201,7 +276,7 @@ function getActiveBuildingInfo(cityIOdata) {
   if (sensorBlockCell) {
     return {
       height: readHeightValue(sensorBlockCell),
-      color: getCellDisplayColor(sensorBlockCell),
+      color: getCellDisplayColor(sensorBlockCell, geogridData),
       name: getCellDisplayName(sensorBlockCell),
     };
   }
