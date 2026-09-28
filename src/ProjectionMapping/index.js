@@ -4,13 +4,11 @@ import Keystoner from "./Components/Keystoner";
 import useWebSocket, { ReadyState } from "react-use-websocket";
 import { getCityIOUrl } from "../settings/settings";
 
-const METRIC_CODES = new Set(["UH", "AN", "A", "RA", "PTA"]);
-
-function normalizeMetricCode(value) {
+function normalizeMetricSelection(value) {
   if (value === undefined || value === null) return null;
 
-  const code = String(value).trim().toUpperCase();
-  return METRIC_CODES.has(code) ? code : null;
+  const text = String(value).trim();
+  return text.length > 0 ? text : null;
 }
 
 function readMetricCode(source) {
@@ -28,8 +26,8 @@ function readMetricCode(source) {
   ];
 
   for (const candidate of candidates) {
-    const code = normalizeMetricCode(candidate);
-    if (code) return code;
+    const metric = normalizeMetricSelection(candidate);
+    if (metric) return metric;
   }
 
   return null;

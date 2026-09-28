@@ -12,7 +12,6 @@ Layer drawing order:
 
 */
 
-import { mapSettings as settings } from "../../settings/settings";
 import DeckMap from "./BaseMap";
 import {
   createHeatmapLayer,
@@ -44,6 +43,7 @@ function normalizeMetricKey(value) {
 function metricLayerIdFromTableValue(value) {
   if (!value) return null;
 
+  const rawValue = String(value).trim();
   const raw = normalizeMetricKey(value);
   const selectedMetric = METRIC_OPTIONS.find(
     (option) =>
@@ -52,7 +52,7 @@ function metricLayerIdFromTableValue(value) {
       normalizeMetricKey(option.layerId) === raw
   );
 
-  return selectedMetric?.layerId || null;
+  return selectedMetric?.layerId || (rawValue.length > 0 ? rawValue : null);
 }
 
 function metricValueFromCityIOData(cityIOdata) {
@@ -415,7 +415,7 @@ export default function ProjectionDeckMap(props) {
           type: layer.type,
         }))
       );
-      return null;
+      return currentLayers[0];
     }
 
     return selectedLayer;
@@ -446,9 +446,7 @@ export default function ProjectionDeckMap(props) {
       return;
     }
 
-    const styles = settings.map.mapStyles;
-    const mapStyle = styles.Light;
-    const layerArray = [createTileLayer(mapStyle)];
+    const layerArray = [createTileLayer()];
 
     const currentLayers = getModuleLayers(cityIOdata);
     const selectedLayer = findSelectedLayer(currentLayers);

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import DeckGL from "@deck.gl/react";
 import ViewStateInputs from "../Components/ViewStateInputs";
-import "mapbox-gl/dist/mapbox-gl.css";
 
 function cloneDeckLayer(layer) {
   if (!layer) return null;
