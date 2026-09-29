@@ -524,12 +524,12 @@ export const createPathLayer = (
       ],
 
     getWidth: (d) =>
-      d.width ||
-      d.line_width ||
+      d.width ??
+      d.line_width ??
       layer.properties
-        ?.width ||
+        ?.width ??
       layer.properties
-        ?.getWidth ||
+        ?.getWidth ??
       6,
 
     widthUnits:
@@ -539,18 +539,22 @@ export const createPathLayer = (
 
     widthScale:
       layer.properties
-        ?.widthScale ||
+        ?.widthScale ??
       1,
 
-    lineWidthMinPixels:
+    widthMinPixels:
       layer.properties
-        ?.lineWidthMinPixels ||
+        ?.widthMinPixels ??
+      layer.properties
+        ?.lineWidthMinPixels ??
       2,
 
-    lineWidthMaxPixels:
+    widthMaxPixels:
       layer.properties
-        ?.lineWidthMaxPixels ||
-      14,
+        ?.widthMaxPixels ??
+      layer.properties
+        ?.lineWidthMaxPixels ??
+      32,
 
     opacity:
       layer.properties
@@ -566,6 +570,8 @@ export const createPathLayer = (
       layer.properties
         ?.jointRounded ??
       true,
+
+    billboard: true,
 
     pickable: true,
 
@@ -721,7 +727,7 @@ export const createMeshLayer = (
         color[0],
         color[1],
         color[2],
-        70,
+        255,
       ];
     },
 
@@ -729,7 +735,7 @@ export const createMeshLayer = (
       0,
       0,
       0,
-      220,
+      170,
     ],
 
     updateTriggers: {

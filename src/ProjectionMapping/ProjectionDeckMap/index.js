@@ -7,8 +7,8 @@ UH, AN, A, RA, PTA.
 
 Layer drawing order:
 1. basemap
-2. selected metric layer
-3. interactive grid mesh + labels
+2. selected metric layer(s)
+3. interactive grid mesh + labels (always projected on top)
 
 */
 
@@ -91,6 +91,10 @@ function layerMatchesMetricId(layer, metricLayerId) {
     layer.properties?.label,
     layer.properties?.layerId,
     layer.properties?.layerID,
+    layer.metricId,
+    layer.metric_id,
+    layer.properties?.metricId,
+    layer.properties?.metric_id,
   ].filter(Boolean);
 
   return candidates.some((candidate) => normalizeMetricKey(candidate) === target);
@@ -490,10 +494,26 @@ export default function ProjectionDeckMap(props) {
           type: layer.type,
         }))
       );
-      return currentLayers[0];
+      return null;
     }
 
     return selectedLayer;
+  };
+
+  const findSelectedLayers = (currentLayers) => {
+    if (!Array.isArray(currentLayers) || currentLayers.length === 0) {
+      return [];
+    }
+
+    if (!selectedLayerId) {
+      return [currentLayers[0]];
+    }
+
+    if (!findSelectedLayer(currentLayers)) {
+      return [];
+    }
+
+    return currentLayers.filter((layer) => layerMatchesMetricId(layer, selectedLayerId));
   };
 
   const createDeckLayer = (layerIndex, layer) => {
@@ -524,26 +544,34 @@ export default function ProjectionDeckMap(props) {
     const layerArray = [createTileLayer()];
 
     const currentLayers = getModuleLayers(cityIOdata);
-    const selectedLayer = findSelectedLayer(currentLayers);
-    const selectedLayerIndex = selectedLayer ? currentLayers.indexOf(selectedLayer) : 0;
+    const selectedLayers = findSelectedLayers(currentLayers);
 
     console.log("Projection selected metric raw:", selectedMetricValue);
     console.log("Projection selected metric layerId:", selectedLayerId);
-    console.log("Projection selected layer:", selectedLayer);
+    console.log("Projection selected layers:", selectedLayers);
     console.log("Projection currentLayers:", currentLayers);
 
-    if (!selectedLayer) {
+    if (selectedLayers.length === 0) {
       setLayerInfo(selectedLayerId ? `No layer matched ${selectedLayerId}` : "No module layers found");
       pushGridOnTop(layerArray);
       setLayersToRender(layerArray);
       return;
     }
 
-    setLayerInfo(selectedLayer.id || `Layer ${selectedLayerIndex + 1}`);
+    if (selectedLayers.length === 1) {
+      const selectedLayer = selectedLayers[0];
+      const selectedLayerIndex = currentLayers.indexOf(selectedLayer);
+      setLayerInfo(selectedLayer.id || `Layer ${selectedLayerIndex + 1}`);
+    } else {
+      setLayerInfo(selectedLayerId || selectedMetricValue || "Metric");
+    }
 
-    const deckLayer = createDeckLayer(selectedLayerIndex, selectedLayer);
-    if (deckLayer) {
-      layerArray.push(deckLayer);
+    for (const selectedLayer of selectedLayers) {
+      const selectedLayerIndex = currentLayers.indexOf(selectedLayer);
+      const deckLayer = createDeckLayer(selectedLayerIndex, selectedLayer);
+      if (deckLayer) {
+        layerArray.push(deckLayer);
+      }
     }
 
     pushGridOnTop(layerArray);

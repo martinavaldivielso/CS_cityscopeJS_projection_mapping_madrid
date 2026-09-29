@@ -1,8 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import ProjectionDeckMap from "./ProjectionDeckMap";
 import Keystoner from "./Components/Keystoner";
 import useWebSocket, { ReadyState } from "react-use-websocket";
 import { getCityIOUrl } from "../settings/settings";
+
+const NO_METRIC_SELECTED = "__no_metric_selected__";
 
 function normalizeMetricSelection(value) {
   if (value === undefined || value === null) return null;
@@ -20,6 +22,10 @@ function readMetricCode(source) {
     source.layer_id,
     source.selectedLayerId,
     source.selected_layer_id,
+    source.selectedMetric,
+    source.selected_metric,
+    source.selectedIndicator,
+    source.selected_indicator,
     source.metricCode,
     source.metric_code,
     source.metric,
@@ -39,13 +45,29 @@ function readMetricCodeFromMessage(message) {
   const content = message.content || {};
   const snapshot = content.snapshot || {};
   const moduleData = content.moduleData || {};
+  const sources = [content, snapshot, moduleData, snapshot.moduleData, message];
 
-  return (
-    readMetricCode(content) ||
-    readMetricCode(snapshot) ||
-    readMetricCode(moduleData) ||
-    readMetricCode(message)
-  );
+  for (const source of sources) {
+    const metric = readMetricCode(source);
+    if (metric) return metric;
+  }
+
+  for (const source of sources) {
+    const cellCollections = Array.isArray(source)
+      ? [source]
+      : [source?.GEOGRIDDATA, source?.geogriddata];
+
+    for (const cells of cellCollections) {
+      if (!Array.isArray(cells)) continue;
+
+      for (const cell of cells) {
+        const metric = readMetricCode(cell) || readMetricCode(cell?.properties);
+        if (metric) return metric;
+      }
+    }
+  }
+
+  return null;
 }
 
 export default function ProjectionMapping(props) {
@@ -53,6 +75,11 @@ export default function ProjectionMapping(props) {
   // state to store the cityIO data
   const [cityIOData, setCityIOData] = useState();
   const [selectedLayerId, setSelectedLayerId] = useState(null);
+  const explicitMetricRef = useRef(null);
+
+  useEffect(() => {
+    console.log("Selected metric state:", selectedLayerId);
+  }, [selectedLayerId]);
 
   const { readyState, sendJsonMessage, lastJsonMessage } = useWebSocket(
     //  get cityIO url from the settings
@@ -80,13 +107,24 @@ export default function ProjectionMapping(props) {
     if (!lastJsonMessage) return;
 
     const incomingMetricCode = readMetricCodeFromMessage(lastJsonMessage);
+    console.log("CityIO raw metric value:", incomingMetricCode);
+    const isModuleEcho =
+      lastJsonMessage.type === "MODULE" &&
+      !readMetricCode(lastJsonMessage.content) &&
+      !readMetricCode(lastJsonMessage);
+    if (incomingMetricCode && !isModuleEcho) {
+      explicitMetricRef.current = incomingMetricCode;
+    }
+    const selectedMetricCode = isModuleEcho
+      ? explicitMetricRef.current || incomingMetricCode
+      : incomingMetricCode;
 
-    if (incomingMetricCode) {
-      console.log("Table metric code selected:", incomingMetricCode, lastJsonMessage);
-      setSelectedLayerId(incomingMetricCode);
+    if (selectedMetricCode) {
+      console.log("Table metric code selected:", selectedMetricCode, lastJsonMessage);
+      setSelectedLayerId(selectedMetricCode);
       setCityIOData((prev) => ({
         ...prev,
-        selectedLayerId: incomingMetricCode,
+        selectedLayerId: selectedMetricCode,
       }));
     }
 
@@ -94,7 +132,7 @@ export default function ProjectionMapping(props) {
       console.log("Socket open with", tableName, lastJsonMessage);
       const cityIOdata = lastJsonMessage.content;
       const snapshot = cityIOdata.snapshot || cityIOdata;
-      const metricCode = incomingMetricCode;
+      const metricCode = selectedMetricCode;
 
       setCityIOData((prev) => ({
         ...snapshot,
@@ -110,7 +148,7 @@ export default function ProjectionMapping(props) {
 ) {
   const content = lastJsonMessage.content || {};
   const geogriddata = content.geogriddata || content.GEOGRIDDATA || content;
-  const metricCode = incomingMetricCode;
+  const metricCode = selectedMetricCode;
 
   setCityIOData((prev) => {
     const selectedMetric =
@@ -138,7 +176,7 @@ export default function ProjectionMapping(props) {
     } else if (lastJsonMessage.type === "MODULE") {
       const content = lastJsonMessage.content || {};
       const moduleData = content.moduleData || {};
-      const metricCode = incomingMetricCode;
+      const metricCode = selectedMetricCode;
 
       setCityIOData((prev) => {
       const selectedMetric =
@@ -239,7 +277,7 @@ export default function ProjectionMapping(props) {
               <ProjectionDeckMap
                 viewStateEditMode={viewStateEditMode}
                 cityIOdata={cityIOData}
-                selectedLayerId={selectedLayerId}
+                selectedLayerId={selectedLayerId ?? NO_METRIC_SELECTED}
               />
             </Keystoner>
           </div>
