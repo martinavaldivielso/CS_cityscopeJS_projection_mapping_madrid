@@ -419,17 +419,54 @@ function findMatchingPieceColor(
 }
 
 
+function getBlockTypeColor(cell) {
+  const name =
+    String(
+      getCellDisplayName(cell) || ""
+    )
+      .trim()
+      .toLowerCase();
+
+  const colors = {
+    shopping: [255, 0, 255],
+    office: [36, 130, 198],
+    residential: [185, 126, 24],
+    park: [126, 179, 70],
+    restaurant: [255, 255, 0],
+  };
+
+  return colors[name] || null;
+}
+
+
 function getCellDisplayColor(
   cell,
   geogridData
 ) {
+  // 1. First use the standard CityScope color
+  // associated with the block type.
+  const typeColor =
+    getBlockTypeColor(cell);
+
+  if (typeColor) {
+    return typeColor;
+  }
+
+  // 2. Otherwise try a color explicitly sent by the table.
   const directColor =
     parseColorValue(
-      getRawCellColor(
-        cell
-      )
+      getRawCellColor(cell)
     );
 
+  if (
+    directColor &&
+    !isBlackColor(directColor)
+  ) {
+    return directColor;
+  }
+
+  // 3. Last fallback: look for another grid cell
+  // with the same land-use type.
   const matchingPieceColor =
     findMatchingPieceColor(
       cell,
@@ -438,21 +475,18 @@ function getCellDisplayColor(
 
   if (
     matchingPieceColor &&
-    (
-      !directColor ||
-      isBlackColor(
-        directColor
-      )
+    !isBlackColor(
+      matchingPieceColor
     )
   ) {
     return matchingPieceColor;
   }
 
-  return (
-    directColor ||
-    matchingPieceColor ||
-    [255, 255, 255]
-  );
+  return [
+    255,
+    255,
+    255,
+  ];
 }
 
 
@@ -562,7 +596,7 @@ function ProjectionLegend({
     );
 
   const activeHeight =
-    activeBuilding.height;
+  activeBuilding.height;
 
   const activeColor =
     activeBuilding.color;
@@ -570,17 +604,41 @@ function ProjectionLegend({
   const activeName =
     activeBuilding.name;
 
-  const heightRatio =
+  // Physical table slider limits.
+  const TABLE_HEIGHT_MIN = 0;
+  const TABLE_HEIGHT_MAX = 75;
+
+  // Projected bar limits in pixels.
+  const PROJECTED_HEIGHT_MIN = 0;
+  const PROJECTED_HEIGHT_MAX = 140;
+
+
+  // Normalize physical table height to 0 -> 1.
+  const normalizedHeight =
     Math.max(
       0,
       Math.min(
         1,
-        activeHeight / 10
+        (
+          activeHeight -
+          TABLE_HEIGHT_MIN
+        ) /
+        (
+          TABLE_HEIGHT_MAX -
+          TABLE_HEIGHT_MIN
+        )
       )
     );
 
+
+  // Convert normalized value to projected pixel height.
   const projectedBuildingHeight =
-    heightRatio * 140;
+    PROJECTED_HEIGHT_MIN +
+    normalizedHeight *
+    (
+      PROJECTED_HEIGHT_MAX -
+      PROJECTED_HEIGHT_MIN
+    );
 
   return (
     <div
