@@ -26,11 +26,13 @@ import { useState, useEffect } from "react";
 import { OBJLoader } from "@loaders.gl/obj";
 
 const METRIC_OPTIONS = [
-  { label: "UH", name: "Urban Heat", layerId: "urbanHeatH3" },
-  { label: "AN", name: "Access to Nature", layerId: "accessToNature" },
-  { label: "A", name: "Accessibility", layerId: "accessibility" },
-  { label: "RA", name: "Restaurant Accessibility", layerId: "restaurantAccessibility" },
+  
   { label: "PTA", name: "Public Transit Accessibility", layerId: "publicTransitAccessibility" },
+  { label: "RA", name: "Restaurant Accessibility", layerId: "restaurantAccessibility" },
+  { label: "A", name: "Accessibility", layerId: "accessibility" },
+  { label: "AN", name: "Access to Nature", layerId: "accessToNature" },
+  { label: "UH", name: "Urban Heat", layerId: "urbanHeatH3" }
+  
 ];
 
 function normalizeMetricKey(value) {
