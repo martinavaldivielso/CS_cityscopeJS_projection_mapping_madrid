@@ -610,7 +610,7 @@ function ProjectionLegend({
 
   // Projected bar limits in pixels.
   const PROJECTED_HEIGHT_MIN = 0;
-  const PROJECTED_HEIGHT_MAX = 140;
+  const PROJECTED_HEIGHT_MAX = 155;
 
 
   // Normalize physical table height to 0 -> 1.
@@ -723,7 +723,7 @@ function ProjectionLegend({
               "absolute",
 
             left:
-              78,
+              100,
 
             top:
               65,
