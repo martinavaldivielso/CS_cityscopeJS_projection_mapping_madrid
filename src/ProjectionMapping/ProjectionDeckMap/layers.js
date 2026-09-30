@@ -18,7 +18,7 @@ import {
    ========================================================= */
 
 const DEFAULT_DARK_CARTO_TILE_URL =
-  "https://basemaps.cartocdn.com/rastertiles/dark_nolabels/{z}/{x}/{y}.png?key=cb1_3ogj_1_5edcf0d897bd93afc2831076";
+  "https://basemaps.cartocdn.com/rastertiles/light_nolabels/{z}/{x}/{y}.png?key=cb1_3ogj_1_5edcf0d897bd93afc2831076";
 
 
 /* =========================================================
@@ -627,13 +627,21 @@ export const createTileLayer = () => {
           data: null,
 
           image:
-            props.data,
+          props.data,
 
           bounds: [
             west,
             south,
             east,
             north,
+          ],
+
+          desaturate: 1,
+
+          tintColor: [
+            45,
+            75,
+            115,
           ],
         }
       );
