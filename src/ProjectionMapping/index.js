@@ -1,88 +1,119 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import ProjectionDeckMap from "./ProjectionDeckMap";
 import Keystoner from "./Components/Keystoner";
 import useWebSocket, { ReadyState } from "react-use-websocket";
 import { getCityIOUrl } from "../settings/settings";
 
-const NO_METRIC_SELECTED = "__no_metric_selected__";
+const VALID_METRIC_CODES = new Set([
+  "PTA",
+  "RA",
+  "A",
+  "AN",
+  "UH"
+]);
 
-function normalizeMetricSelection(value) {
+function normalizeMetricCode(value) {
   if (value === undefined || value === null) return null;
 
-  const text = String(value).trim();
-  return text.length > 0 ? text : null;
+  const code = String(value).trim().toUpperCase();
+
+  return VALID_METRIC_CODES.has(code)
+    ? code
+    : null;
 }
 
 function readMetricCode(source) {
-  if (!source || typeof source !== "object") return null;
-
-  const candidates = [
-    source.layerID,
-    source.layerId,
-    source.layer_id,
-    source.selectedLayerId,
-    source.selected_layer_id,
-    source.selectedMetric,
-    source.selected_metric,
-    source.selectedIndicator,
-    source.selected_indicator,
-    source.metricCode,
-    source.metric_code,
-    source.metric,
-  ];
-
-  for (const candidate of candidates) {
-    const metric = normalizeMetricSelection(candidate);
-    if (metric) return metric;
+  if (!source || typeof source !== "object") {
+    return null;
   }
 
-  return null;
+  return (
+    normalizeMetricCode(source.metricCode) ||
+    normalizeMetricCode(source.metric_code) ||
+    normalizeMetricCode(source.selectedMetric) ||
+    normalizeMetricCode(source.selected_metric) ||
+    normalizeMetricCode(source.layerID) ||
+    normalizeMetricCode(source.layerId) ||
+    normalizeMetricCode(source.layer_id) ||
+    null
+  );
 }
 
-function readMetricCodeFromMessage(message) {
-  if (!message || typeof message !== "object") return null;
-
-  const content = message.content || {};
-  const snapshot = content.snapshot || {};
-  const moduleData = content.moduleData || {};
-  const sources = [content, snapshot, moduleData, snapshot.moduleData, message];
-
-  for (const source of sources) {
-    const metric = readMetricCode(source);
-    if (metric) return metric;
+function readMetricCodeFromCells(cells) {
+  if (!Array.isArray(cells)) {
+    return null;
   }
 
-  for (const source of sources) {
-    const cellCollections = Array.isArray(source)
-      ? [source]
-      : [source?.GEOGRIDDATA, source?.geogriddata];
+  for (const cell of cells) {
+    const code =
+      readMetricCode(cell) ||
+      readMetricCode(cell?.properties);
 
-    for (const cells of cellCollections) {
-      if (!Array.isArray(cells)) continue;
-
-      for (const cell of cells) {
-        const metric = readMetricCode(cell) || readMetricCode(cell?.properties);
-        if (metric) return metric;
-      }
+    if (code) {
+      return code;
     }
   }
 
   return null;
 }
 
+function readMetricCodeFromTableMessage(message) {
+  if (!message || typeof message !== "object") {
+    return null;
+  }
+
+  const content = message.content;
+
+  // GEOGRIDDATA_UPDATE may send the cell array directly.
+  if (Array.isArray(content)) {
+    return readMetricCodeFromCells(content);
+  }
+
+  if (!content || typeof content !== "object") {
+    return null;
+  }
+
+  // Direct metric value from CityIO.
+  const directCode = readMetricCode(content);
+
+  if (directCode) {
+    return directCode;
+  }
+
+  // Initial TABLE_SNAPSHOT.
+  if (message.type === "TABLE_SNAPSHOT") {
+    const snapshot = content.snapshot || content;
+
+    return (
+      readMetricCode(snapshot) ||
+      readMetricCodeFromCells(snapshot.GEOGRIDDATA)
+    );
+  }
+
+  // GEOGRIDDATA wrapped inside an object.
+  return (
+    readMetricCodeFromCells(content.GEOGRIDDATA) ||
+    readMetricCodeFromCells(content.geogriddata) ||
+    readMetricCodeFromCells(content.geogridData) ||
+    null
+  );
+}
+
 export default function ProjectionMapping(props) {
   const tableName = props.tableName;
-  // state to store the cityIO data
+
   const [cityIOData, setCityIOData] = useState();
-  const [selectedLayerId, setSelectedLayerId] = useState(null);
-  const explicitMetricRef = useRef(null);
+  const [selectedMetricCode, setSelectedMetricCode] = useState(null);
 
-  useEffect(() => {
-    console.log("Selected metric state:", selectedLayerId);
-  }, [selectedLayerId]);
+  const [editMode, setEditMode] = useState(false);
+  const [viewStateEditMode, setViewStateEditMode] = useState(false);
+  const [tableRatio, setTableRatio] = useState();
 
-  const { readyState, sendJsonMessage, lastJsonMessage } = useWebSocket(
-    //  get cityIO url from the settings
+  const {
+    readyState,
+    sendJsonMessage,
+    lastJsonMessage,
+  } = useWebSocket(
     getCityIOUrl.current,
     {
       share: true,
@@ -90,169 +121,308 @@ export default function ProjectionMapping(props) {
     }
   );
 
+  // -----------------------------------------------------------------------
+  // Subscribe to CityIO
+  // -----------------------------------------------------------------------
+
   useEffect(() => {
-    if (readyState === ReadyState.OPEN) {
-      sendJsonMessage({
-        type: "LISTEN",
-        content: {
-          gridId: tableName,
-        },
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readyState]);
-
-  // when lastJsonMessage updates, print it to the console
-  useEffect(() => {
-    if (!lastJsonMessage) return;
-
-    const incomingMetricCode = readMetricCodeFromMessage(lastJsonMessage);
-    console.log("CityIO raw metric value:", incomingMetricCode);
-    const isModuleEcho =
-      lastJsonMessage.type === "MODULE" &&
-      !readMetricCode(lastJsonMessage.content) &&
-      !readMetricCode(lastJsonMessage);
-    if (incomingMetricCode && !isModuleEcho) {
-      explicitMetricRef.current = incomingMetricCode;
-    }
-    const selectedMetricCode = isModuleEcho
-      ? explicitMetricRef.current || incomingMetricCode
-      : incomingMetricCode;
-
-    if (selectedMetricCode) {
-      console.log("Table metric code selected:", selectedMetricCode, lastJsonMessage);
-      setSelectedLayerId(selectedMetricCode);
-      setCityIOData((prev) => ({
-        ...prev,
-        selectedLayerId: selectedMetricCode,
-      }));
+    if (readyState !== ReadyState.OPEN) {
+      return;
     }
 
-    if (lastJsonMessage.type === "TABLE_SNAPSHOT") {
-      console.log("Socket open with", tableName, lastJsonMessage);
-      const cityIOdata = lastJsonMessage.content;
-      const snapshot = cityIOdata.snapshot || cityIOdata;
-      const metricCode = selectedMetricCode;
-
-      setCityIOData((prev) => ({
-        ...snapshot,
-        selectedLayerId: metricCode || prev?.selectedLayerId || null,
-      }));
-      const numCols = snapshot.GEOGRID.properties.header.ncols;
-      const numRows = snapshot.GEOGRID.properties.header.nrows;
-      setTableRatio(numCols / numRows);
-      console.log("Table ratio: ", numCols / numRows);
-    } else if (
-  lastJsonMessage.type === "GEOGRIDDATA_UPDATE" ||
-  lastJsonMessage.type === "UPDATE_GRID"
-) {
-  const content = lastJsonMessage.content || {};
-  const geogriddata = content.geogriddata || content.GEOGRIDDATA || content;
-  const metricCode = selectedMetricCode;
-
-  setCityIOData((prev) => {
-    const selectedMetric =
-      metricCode ||
-      content.selectedLayerId ||
-      content.layerID ||
-      content.layerId ||
-      content.metricCode ||
-      prev?.selectedLayerId ||
-      null;
-
-    return {
-      ...prev,
-      ...content,
-      GEOGRIDDATA: geogriddata,
-
-      selectedLayerId: selectedMetric,
-      selected_layer_id: selectedMetric,
-      layerID: selectedMetric,
-      layerId: selectedMetric,
-      metricCode: selectedMetric,
-    };
-  });
-      // if the lastJsonMessage is of type "INDICATOR", log it
-    } else if (lastJsonMessage.type === "MODULE") {
-      const content = lastJsonMessage.content || {};
-      const moduleData = content.moduleData || {};
-      const metricCode = selectedMetricCode;
-
-      setCityIOData((prev) => {
-      const selectedMetric =
-        metricCode ||
-        content.selectedLayerId ||
-        content.layerID ||
-        content.layerId ||
-        content.metricCode ||
-        moduleData.selectedLayerId ||
-        moduleData.layerID ||
-        moduleData.layerId ||
-        moduleData.metricCode ||
-        prev?.selectedLayerId ||
-        null;
-
-      return {
-        ...prev,
-        ...content,
-        moduleData,
-        MODULE: content,
-        LAYERS: moduleData.layers || content.layers || prev?.LAYERS,
-
-        selectedLayerId: selectedMetric,
-        selected_layer_id: selectedMetric,
-        layerID: selectedMetric,
-        layerId: selectedMetric,
-        metricCode: selectedMetric,
-      };
+    sendJsonMessage({
+      type: "LISTEN",
+      content: {
+        gridId: tableName,
+      },
     });
-      // if the lastJsonMessage is of type "ERROR", log it
-    } else if (lastJsonMessage.type === "ERROR") {
-      console.error("Error from CityIO", lastJsonMessage);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastJsonMessage]);
+  }, [
+    readyState,
+    sendJsonMessage,
+    tableName,
+  ]);
 
-  const [editMode, setEditMode] = useState(false);
-  const [viewStateEditMode, setViewStateEditMode] = useState(false);
-  const [tableRatio, setTableRatio] = useState();
+  // -----------------------------------------------------------------------
+  // Process CityIO messages
+  // -----------------------------------------------------------------------
+
+  useEffect(() => {
+    if (!lastJsonMessage) {
+      return;
+    }
+
+    const messageType =
+      lastJsonMessage.type;
+
+    const content =
+      lastJsonMessage.content;
+
+    // ===============================================================
+    // TABLE SNAPSHOT
+    // ===============================================================
+
+    if (messageType === "TABLE_SNAPSHOT") {
+      const snapshot =
+        content?.snapshot ||
+        content;
+
+      if (!snapshot) {
+        return;
+      }
+
+      const metricCode =
+        readMetricCodeFromTableMessage(
+          lastJsonMessage
+        );
+
+      if (metricCode) {
+        setSelectedMetricCode(
+          metricCode
+        );
+
+        console.log(
+          "TABLE METRIC:",
+          metricCode
+        );
+      }
+
+      setCityIOData(
+        (previous) => ({
+          ...previous,
+          ...snapshot,
+
+          selectedMetricCode:
+            metricCode ||
+            previous?.selectedMetricCode ||
+            null,
+        })
+      );
+
+      const numCols =
+        snapshot?.GEOGRID
+          ?.properties
+          ?.header
+          ?.ncols;
+
+      const numRows =
+        snapshot?.GEOGRID
+          ?.properties
+          ?.header
+          ?.nrows;
+
+      if (
+        Number(numCols) > 0 &&
+        Number(numRows) > 0
+      ) {
+        setTableRatio(
+          Number(numCols) /
+          Number(numRows)
+        );
+      }
+
+      return;
+    }
+
+    // ===============================================================
+    // PHYSICAL TABLE UPDATE
+    // ===============================================================
+
+    if (
+      messageType === "GEOGRIDDATA_UPDATE" ||
+      messageType === "UPDATE_GRID"
+    ) {
+      const metricCode =
+        readMetricCodeFromTableMessage(
+          lastJsonMessage
+        );
+
+      if (metricCode) {
+        setSelectedMetricCode(
+          metricCode
+        );
+
+        console.log(
+          "TABLE METRIC:",
+          metricCode
+        );
+      }
+
+      const contentObject =
+        content &&
+        typeof content === "object" &&
+        !Array.isArray(content)
+          ? content
+          : {};
+
+      const geogriddata =
+        Array.isArray(content)
+          ? content
+          : contentObject.GEOGRIDDATA ||
+            contentObject.geogriddata ||
+            contentObject.geogridData ||
+            null;
+
+      setCityIOData(
+        (previous) => ({
+          ...previous,
+
+          ...(Array.isArray(content)
+            ? {}
+            : contentObject),
+
+          ...(geogriddata
+            ? {
+                GEOGRIDDATA:
+                  geogriddata,
+              }
+            : {}),
+
+          selectedMetricCode:
+            metricCode ||
+            previous?.selectedMetricCode ||
+            null,
+        })
+      );
+
+      return;
+    }
+
+    // ===============================================================
+    // METRICS MODULE OUTPUT
+    // ===============================================================
+
+    if (messageType === "MODULE") {
+      const moduleContent =
+        content || {};
+
+      const moduleData =
+        moduleContent.moduleData ||
+        {};
+
+      /*
+       * IMPORTANT:
+       *
+       * MODULE messages do NOT decide the selected metric.
+       *
+       * The physical table is the source of truth.
+       *
+       * MODULE only supplies the calculated projection layer
+       * and numeric indicators.
+       */
+
+      setCityIOData(
+        (previous) => ({
+          ...previous,
+          ...moduleContent,
+
+          moduleData,
+
+          MODULE:
+            moduleContent,
+
+          /*
+           * table.py now sends exactly one selected projection layer.
+           */
+          LAYERS:
+            Array.isArray(
+              moduleData.layers
+            )
+              ? moduleData.layers
+              : previous?.LAYERS || [],
+
+          numeric:
+            moduleData.numeric ||
+            previous?.numeric ||
+            [],
+
+          selectedMetricCode:
+            previous?.selectedMetricCode ||
+            selectedMetricCode ||
+            null,
+        })
+      );
+
+      console.log(
+        "MODULE LAYERS:",
+        moduleData.layers || []
+      );
+
+      return;
+    }
+
+    // ===============================================================
+    // ERROR
+    // ===============================================================
+
+    if (messageType === "ERROR") {
+      console.error(
+        "Error from CityIO",
+        lastJsonMessage
+      );
+    }
+  }, [
+    lastJsonMessage,
+    selectedMetricCode,
+  ]);
+
+  // -----------------------------------------------------------------------
+  // Projection calibration
+  // -----------------------------------------------------------------------
 
   const clearLocalStorage = () => {
-    if (localStorage.getItem("projMap")) {
-      localStorage.removeItem("projMap");
-    }
-    if (localStorage.getItem("projectionViewStateStorage")) {
-      localStorage.removeItem("projectionViewStateStorage");
-    }
+    localStorage.removeItem(
+      "projMap"
+    );
+
+    localStorage.removeItem(
+      "projectionViewStateStorage"
+    );
+
     window.location.reload();
   };
 
   useEffect(() => {
-    console.log("Keystone starting...");
-    const onKeyDown = ({ key }) => {
+    const onKeyDown = ({
+      key,
+    }) => {
       if (key === " ") {
-        setEditMode((editMode) => !editMode);
+        setEditMode(
+          (current) =>
+            !current
+        );
       }
-      // if the key is 'z', display the viewState editor
-      if (key === "z") {
-        setViewStateEditMode((viewStateEditMode) => !viewStateEditMode);
+
+      if (
+        key.toLowerCase() === "z"
+      ) {
+        setViewStateEditMode(
+          (current) =>
+            !current
+        );
       }
     };
-    document.addEventListener("keydown", onKeyDown);
+
+    document.addEventListener(
+      "keydown",
+      onKeyDown
+    );
+
     return () => {
-      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener(
+        "keydown",
+        onKeyDown
+      );
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // -----------------------------------------------------------------------
+  // Render
+  // -----------------------------------------------------------------------
 
   return (
     <>
       {tableRatio && (
         <div
-          // ! this div's props are
-          // ! controlling the projection z-index
-          // ! above the menus
-
           style={{
             height: "100vh",
             width: "100vw",
@@ -268,32 +438,63 @@ export default function ProjectionMapping(props) {
               style={{
                 height: "100vh",
                 width: `${tableRatio * 100}vh`,
-                backgroundColor: editMode ? "red" : null,
-                // have 1px border to show the edges of the projection
-                border: editMode ? "1px solid red" : "1px solid white",
+
+                backgroundColor:
+                  editMode
+                    ? "red"
+                    : null,
+
+                border:
+                  editMode
+                    ? "1px solid red"
+                    : "1px solid white",
               }}
-              isEditMode={editMode}
+              isEditMode={
+                editMode
+              }
             >
               <ProjectionDeckMap
-                viewStateEditMode={viewStateEditMode}
-                cityIOdata={cityIOData}
-                selectedLayerId={selectedLayerId ?? NO_METRIC_SELECTED}
+                viewStateEditMode={
+                  viewStateEditMode
+                }
+
+                cityIOdata={
+                  cityIOData
+                }
+
+                selectedLayerId={
+                  selectedMetricCode
+                }
               />
             </Keystoner>
           </div>
         </div>
       )}
+
       {editMode && (
         <div
           style={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            zIndex: 1000,
+            position:
+              "absolute",
+
+            top:
+              "50%",
+
+            left:
+              "50%",
+
+            transform:
+              "translate(-50%, -50%)",
+
+            zIndex:
+              1000,
           }}
         >
-          <button onClick={() => clearLocalStorage()}>
+          <button
+            onClick={
+              clearLocalStorage
+            }
+          >
             Clear Local Storage
           </button>
         </div>
