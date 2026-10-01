@@ -873,6 +873,10 @@ export default function ProjectionDeckMap(
   const cityIOdata =
     props.cityIOdata;
 
+  const projectionMode =
+    cityIOdata?.moduleData?.mode ||
+    "metrics";
+
   const viewStateEditMode =
     props.viewStateEditMode;
 
@@ -1044,24 +1048,93 @@ export default function ProjectionDeckMap(
       !cityIOdata ||
       !GEOGRID
     ) {
-      setLayersToRender(
-        []
+      setLayersToRender([]);
+      setLayerInfo(null);
+      return;
+    }
+
+    const layerArray = [
+      createTileLayer(),
+    ];
+
+    const projectionLayers =
+      getProjectionLayers();
+
+
+    // -----------------------------------------------------------------------
+    // ABM projection
+    // -----------------------------------------------------------------------
+
+    if (
+      projectionMode === "abm"
+    ) {
+      const abmLayer =
+        projectionLayers.find(
+          (layer) =>
+            layer?.id ===
+            "ABM mobility"
+        ) ||
+        projectionLayers[0];
+
+      console.log(
+        "PROJECTION MODE: ABM"
+      );
+
+      console.log(
+        "RECEIVED ABM LAYERS:",
+        projectionLayers.map(
+          (layer) =>
+            layer?.id
+        )
+      );
+
+      if (!abmLayer) {
+        setLayerInfo(
+          "Waiting for ABM mobility"
+        );
+
+        pushGridOnTop(
+          layerArray
+        );
+
+        setLayersToRender(
+          layerArray
+        );
+
+        return;
+      }
+
+      const deckLayer =
+        createDeckLayer(
+          0,
+          abmLayer
+        );
+
+      if (deckLayer) {
+        layerArray.push(
+          deckLayer
+        );
+      }
+
+      pushGridOnTop(
+        layerArray
       );
 
       setLayerInfo(
-        null
+        "ABM mobility"
+      );
+
+      setLayersToRender(
+        layerArray
       );
 
       return;
     }
 
-    // Basemap is always first.
-    const layerArray = [
-      createTileLayer(),
-    ];
 
-    const metricLayers =
-      getProjectionLayers();
+    // -----------------------------------------------------------------------
+    // Metrics projection
+    // -----------------------------------------------------------------------
 
     if (
       !selectedMetricCode
@@ -1099,20 +1172,16 @@ export default function ProjectionDeckMap(
       return;
     }
 
-    /*
-     * table.py should already have filtered the output
-     * to exactly one layer.
-     *
-     * We still verify its ID so a stale MODULE message
-     * cannot display the wrong metric.
-     */
-
     const metricLayer =
-      metricLayers.find(
+      projectionLayers.find(
         (layer) =>
           layer?.id ===
           selectedLayerId
       );
+
+    console.log(
+      "PROJECTION MODE: METRICS"
+    );
 
     console.log(
       "PROJECTION METRIC:",
@@ -1123,7 +1192,7 @@ export default function ProjectionDeckMap(
 
     console.log(
       "RECEIVED LAYERS:",
-      metricLayers.map(
+      projectionLayers.map(
         (layer) =>
           layer?.id
       )
@@ -1157,7 +1226,6 @@ export default function ProjectionDeckMap(
       );
     }
 
-    // Interactive grid ALWAYS last / on top.
     pushGridOnTop(
       layerArray
     );
@@ -1174,8 +1242,8 @@ export default function ProjectionDeckMap(
     GEOGRID,
     selectedMetricCode,
     selectedLayerId,
+    projectionMode,
   ]);
-
 
   if (
     !cityIOdata ||

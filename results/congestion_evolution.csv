@@ -1,0 +1,2 @@
+cycle,time,avg_speed_coeff,max_speed_coeff,min_speed_coeff,congested_roads_count,highly_congested_roads_count,average_car_concentration
+0,2017-09-25T00:00:00,306.9058,2260.8390,2.0203,476,476,0.00
