@@ -5,11 +5,13 @@ import {
   PathLayer,
   BitmapLayer,
   ArcLayer,
+  ScatterplotLayer,
 } from "@deck.gl/layers";
 
 import {
   TileLayer,
   H3ClusterLayer,
+  TripsLayer,
 } from "@deck.gl/geo-layers";
 
 
@@ -583,6 +585,52 @@ export const createPathLayer = (
       getPath: GEOGRID,
       getColor: GEOGRID,
       getWidth: GEOGRID,
+    },
+  });
+
+
+export const createAgentPointLayer = (data) =>
+  new ScatterplotLayer({
+    id: "abm-agent-points",
+    data: Array.isArray(data) ? data : [],
+    getPosition: (d) => d.position,
+    getFillColor: (d) =>
+      Array.isArray(d.color) ? d.color : [180, 186, 196, 235],
+    radiusUnits: "pixels",
+    getRadius: 5,
+    radiusMinPixels: 3,
+    radiusMaxPixels: 8,
+    stroked: false,
+    filled: true,
+    opacity: 0.95,
+    pickable: true,
+    parameters: {
+      depthTest: false,
+    },
+  });
+
+export const createAgentTripsLayer = (data, currentTime, trailLength) =>
+  new TripsLayer({
+    id: "abm-agent-trips",
+    data: Array.isArray(data) ? data : [],
+    getPath: (d) => d.path,
+    getTimestamps: (d) => d.timestamps,
+    getColor: (d) =>
+      Array.isArray(d.color) ? d.color : [180, 186, 196, 235],
+    getWidth: 3,
+    widthUnits: "pixels",
+    widthMinPixels: 2,
+    widthMaxPixels: 7,
+    currentTime: Number(currentTime) || 0,
+    trailLength: Math.max(0, Number(trailLength) || 0),
+    fadeTrail: true,
+    capRounded: true,
+    jointRounded: true,
+    billboard: true,
+    opacity: 0.95,
+    pickable: true,
+    parameters: {
+      depthTest: false,
     },
   });
 

@@ -22,6 +22,8 @@ import {
   createGeoJsonLayer,
   createPathLayer,
   createH3ClusterLayer,
+  createAgentPointLayer,
+  createAgentTripsLayer,
 } from "./layers";
 
 import { useState, useEffect } from "react";
@@ -897,6 +899,11 @@ export default function ProjectionDeckMap(
   const GEOGRID =
     cityIOdata?.GEOGRID;
 
+  const abmVisualization =
+    cityIOdata?.moduleData?.abmVisualization ||
+    cityIOdata?.abmVisualization ||
+    null;
+
 
   // -----------------------------------------------------------------------
   // Backend now sends exactly one selected layer.
@@ -1065,69 +1072,70 @@ export default function ProjectionDeckMap(
     // ABM projection
     // -----------------------------------------------------------------------
 
-    if (
-      projectionMode === "abm"
-    ) {
-      const abmLayer =
-        projectionLayers.find(
-          (layer) =>
-            layer?.id ===
-            "ABM mobility"
-        ) ||
-        projectionLayers[0];
+    if (projectionMode === "abm") {
+      console.log("PROJECTION MODE: ABM");
 
-      console.log(
-        "PROJECTION MODE: ABM"
-      );
+      if (abmVisualization) {
+        const pointAgents = Array.isArray(abmVisualization.pointAgents)
+          ? abmVisualization.pointAgents
+          : [];
 
-      console.log(
-        "RECEIVED ABM LAYERS:",
-        projectionLayers.map(
-          (layer) =>
-            layer?.id
-        )
-      );
+        const movementTrails = Array.isArray(abmVisualization.movementTrails)
+          ? abmVisualization.movementTrails
+          : [];
 
-      if (!abmLayer) {
-        setLayerInfo(
-          "Waiting for ABM mobility"
-        );
+        const simulationTime = Number(abmVisualization.simulationTime) || 0;
+        const trailLength = Number(abmVisualization.trailLengthMinutes) || 0;
 
-        pushGridOnTop(
-          layerArray
-        );
+        console.log("ABM VISUALIZATION:", {
+          simulationTime,
+          trailLength,
+          pointAgents: pointAgents.length,
+          movementTrails: movementTrails.length,
+        });
 
-        setLayersToRender(
-          layerArray
-        );
+        if (movementTrails.length > 0) {
+          layerArray.push(
+            createAgentTripsLayer(
+              movementTrails,
+              simulationTime,
+              trailLength
+            )
+          );
+        }
 
+        if (pointAgents.length > 0) {
+          layerArray.push(
+            createAgentPointLayer(pointAgents)
+          );
+        }
+
+        pushGridOnTop(layerArray);
+        setLayerInfo("ABM mobility");
+        setLayersToRender(layerArray);
         return;
       }
 
-      const deckLayer =
-        createDeckLayer(
-          0,
-          abmLayer
-        );
+      const abmLayer =
+        projectionLayers.find((layer) => layer?.id === "ABM mobility") ||
+        projectionLayers[0];
 
-      if (deckLayer) {
-        layerArray.push(
-          deckLayer
-        );
+      if (!abmLayer) {
+        setLayerInfo("Waiting for ABM mobility");
+        pushGridOnTop(layerArray);
+        setLayersToRender(layerArray);
+        return;
       }
 
-      pushGridOnTop(
-        layerArray
-      );
+      const deckLayer = createDeckLayer(0, abmLayer);
 
-      setLayerInfo(
-        "ABM mobility"
-      );
+      if (deckLayer) {
+        layerArray.push(deckLayer);
+      }
 
-      setLayersToRender(
-        layerArray
-      );
-
+      pushGridOnTop(layerArray);
+      setLayerInfo("ABM mobility");
+      setLayersToRender(layerArray);
       return;
     }
 
@@ -1243,6 +1251,7 @@ export default function ProjectionDeckMap(
     selectedMetricCode,
     selectedLayerId,
     projectionMode,
+    abmVisualization,
   ]);
 
   if (
